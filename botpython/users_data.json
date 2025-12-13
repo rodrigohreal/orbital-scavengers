@@ -1,0 +1,48 @@
+{
+    "1112981225": {
+        "name": "Rodrigo",
+        "credits": 90605000,
+        "drone_level": 20,
+        "inventory": [
+            {
+                "id": "c19",
+                "name": "Revista Vieja",
+                "value": 3,
+                "chance": 70,
+                "rarity": "⚪️ COMÚN"
+            },
+            {
+                "id": "c19",
+                "name": "Revista Vieja",
+                "value": 3,
+                "chance": 70,
+                "rarity": "⚪️ COMÚN"
+            },
+            {
+                "id": "c02",
+                "name": "Cable Quemado",
+                "value": 2,
+                "chance": 95,
+                "rarity": "⚪️ COMÚN"
+            }
+        ],
+        "mining_end_time": 1764446254.2886915,
+        "is_mining": false,
+        "last_message_id": 273,
+        "mission_sector": 723,
+        "last_drone_img_id": null,
+        "autopilot_start_time": 0,
+        "autopilot_end_time": 0,
+        "speed_boost_value": 10,
+        "speed_boost_end_time": 1764445019.298518
+    },
+    "8584487418": {
+        "name": "ClayLangBot",
+        "credits": 0,
+        "drone_level": 1,
+        "inventory": [],
+        "mining_end_time": 0,
+        "is_mining": false,
+        "last_message_id": 271
+    }
+}
