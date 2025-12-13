@@ -44,13 +44,32 @@ const ITEMS_DB = [
   { name: "Tuerca Oxidada", val: 5, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "🔩", chance: 0.20 },
   { name: "Cable Pelado", val: 8, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "🔌", chance: 0.18 },
   { name: "Lata Espacial", val: 3, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "🥫", chance: 0.18 },
+  { name: "Fragmento Metálico", val: 4, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "⚙️", chance: 0.16 },
+  { name: "Residuo Plástico", val: 2, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "🧩", chance: 0.15 },
+  { name: "Cristal Roto", val: 6, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "💎", chance: 0.14 },
+  { name: "Tornillo Suelto", val: 3, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "🔧", chance: 0.13 },
+  { name: "Chapa Abollada", val: 7, rarity: "Común", style: "text-gray-400", border: "border-gray-600", icon: "📦", chance: 0.12 },
   { name: "Placa de Acero", val: 25, rarity: "Poco Común", style: "text-emerald-400", border: "border-emerald-500", icon: "🛡️", chance: 0.12 },
   { name: "Batería de Iones", val: 40, rarity: "Poco Común", style: "text-emerald-400", border: "border-emerald-500", icon: "🔋", chance: 0.10 },
+  { name: "Sensor Óptico", val: 35, rarity: "Poco Común", style: "text-emerald-400", border: "border-emerald-500", icon: "👁️", chance: 0.09 },
+  { name: "Conductor de Energía", val: 50, rarity: "Poco Común", style: "text-emerald-400", border: "border-emerald-500", icon: "⚡", chance: 0.08 },
+  { name: "Aleación Refinada", val: 60, rarity: "Poco Común", style: "text-emerald-400", border: "border-emerald-500", icon: "🔬", chance: 0.07 },
+  { name: "Núcleo de Plasma", val: 80, rarity: "Poco Común", style: "text-emerald-400", border: "border-emerald-500", icon: "⚛️", chance: 0.06 },
   { name: "Chip Cuántico", val: 150, rarity: "Raro", style: "text-blue-400", border: "border-blue-500", icon: "💾", chance: 0.07 },
+  { name: "Motor de Iones", val: 200, rarity: "Raro", style: "text-blue-400", border: "border-blue-500", icon: "🛸", chance: 0.06 },
+  { name: "Cristal de Energía", val: 300, rarity: "Raro", style: "text-blue-400", border: "border-blue-500", icon: "💠", chance: 0.05 },
+  { name: "Dispositivo Holográfico", val: 400, rarity: "Raro", style: "text-blue-400", border: "border-blue-500", icon: "📡", chance: 0.04 },
   { name: "Motor WARP", val: 750, rarity: "Épico", style: "text-purple-400", border: "border-purple-500", icon: "🚀", chance: 0.04 },
+  { name: "Núcleo Estelar", val: 1200, rarity: "Épico", style: "text-purple-400", border: "border-purple-500", icon: "⭐", chance: 0.03 },
+  { name: "Artefacto Antiguo", val: 2000, rarity: "Épico", style: "text-purple-400", border: "border-purple-500", icon: "🏺", chance: 0.025 },
+  { name: "Generador de Campo", val: 3500, rarity: "Épico", style: "text-purple-400", border: "border-purple-500", icon: "🌀", chance: 0.02 },
   { name: "Antimateria", val: 5000, rarity: "Legendario", style: "text-yellow-400", border: "border-yellow-500", icon: "⚛️", chance: 0.015 },
   { name: "Huevo Dragón", val: 8000, rarity: "Legendario", style: "text-yellow-400", border: "border-yellow-500", icon: "🥚", chance: 0.01 },
-  { name: "Partícula Dios", val: 50000, rarity: "Mítico", style: "text-rose-500", border: "border-rose-600", icon: "🌌", chance: 0.002 }
+  { name: "Fragmento de Agujero Negro", val: 15000, rarity: "Legendario", style: "text-yellow-400", border: "border-yellow-500", icon: "🕳️", chance: 0.008 },
+  { name: "Esencia Cósmica", val: 25000, rarity: "Legendario", style: "text-yellow-400", border: "border-yellow-500", icon: "✨", chance: 0.005 },
+  { name: "Partícula Dios", val: 50000, rarity: "Mítico", style: "text-rose-500", border: "border-rose-600", icon: "🌌", chance: 0.002 },
+  { name: "Corazón de Estrella", val: 100000, rarity: "Mítico", style: "text-rose-500", border: "border-rose-600", icon: "❤️", chance: 0.001 },
+  { name: "Fragmento del Big Bang", val: 250000, rarity: "Mítico", style: "text-rose-500", border: "border-rose-600", icon: "💥", chance: 0.0005 }
 ];
 
 // --- ESCENA 3D ---
@@ -504,8 +523,10 @@ export default function App() {
     const adjustedItems = ITEMS_DB.map(i => {
       let weight = i.chance;
       if(i.rarity === "Común") weight /= (1 + levelFactor);
+      if(i.rarity === "Poco Común") weight *= (1 + levelFactor * 0.3);
       if(i.rarity === "Raro" || i.rarity === "Épico") weight *= (1 + levelFactor * 0.5);
       if(i.rarity === "Legendario") weight *= (1 + levelFactor);
+      if(i.rarity === "Mítico") weight *= (1 + levelFactor * 1.5);
       return { ...i, weight };
     });
     let totalWeight = adjustedItems.reduce((sum, i) => sum + i.weight, 0);
@@ -572,10 +593,10 @@ export default function App() {
         
         {/* HOME TAB */}
         {activeTab === 'home' && (
-          <div className="h-full flex flex-col justify-end p-4 pb-28 pointer-events-none">
+          <div className="h-full flex flex-col justify-between p-4 pb-28 pointer-events-none">
             
-            {/* Status Bars - Bottom Left */}
-            <div className="flex gap-3 mb-4 pointer-events-auto">
+            {/* Status Bars - Top Right */}
+            <div className="flex gap-3 justify-end pointer-events-auto">
               <div className="glass-panel px-4 py-2.5 rounded-2xl border-l-4 border-blue-500/80 bg-black/70 backdrop-blur-xl shadow-lg animate-[slideUp_0.5s_ease-out]">
                 <span className="text-gray-400 text-[10px] uppercase block tracking-wider font-bold mb-0.5">CRÉDITOS</span>
                 <span className="text-xl font-bold font-mono text-blue-300 drop-shadow-[0_0_10px_rgba(147,197,253,0.5)]">{credits.toLocaleString()} ₡</span>
