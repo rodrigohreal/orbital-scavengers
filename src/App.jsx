@@ -308,7 +308,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
     // Intentar cargar GLB, si falla usar Procedural
     const loader = new GLTFLoader();
     loader.load(
-        '/public/nave.glb',
+        '/nave.glb',
         (gltf) => {
             // ÉXITO: Usar modelo cargado
             const loadedShip = gltf.scene;
