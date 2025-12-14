@@ -43,6 +43,16 @@ const Icons = {
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
   ),
+  ArrowLeft: ({ size = 24, className }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  ),
+  ArrowRight: ({ size = 24, className }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  ),
 };
 
 // --- BASE DE DATOS ---
@@ -659,6 +669,17 @@ export default function App() {
     }
   };
 
+  // --- NAVIGATION ---
+  const changePlanet = (dir) => {
+    if (missionState === 'mining') return;
+    setSelectedPlanet(prev => {
+        const next = prev + dir;
+        if (next < 0) return PLANETS.length - 1;
+        if (next >= PLANETS.length) return 0;
+        return next;
+    });
+  };
+
   const sellEverything = () => {
     if(inventory.length === 0) return;
     const totalVal = inventory.reduce((acc, item) => acc + item.val, 0);
@@ -703,6 +724,8 @@ export default function App() {
   }, [inventory]);
 
   const currentPlanet = PLANETS[selectedPlanet];
+  const isPlanetUnlocked = unlockedPlanets.includes(currentPlanet.id);
+  const canAffordPlanet = credits >= currentPlanet.cost;
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black text-white font-rajdhani select-none">
@@ -726,98 +749,95 @@ export default function App() {
               </div>
             </div>
 
-            {/* Planet Selection - Above Mission Panel */}
-            <div className="w-full max-w-md mx-auto mb-3 pointer-events-auto">
-              <div className="glass-panel p-4 rounded-2xl border border-purple-500/30 bg-black/80 backdrop-blur-xl shadow-xl">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-3 text-center">SELECCIONAR PLANETA</p>
-                <div className="space-y-2">
-                  {PLANETS.map((planet) => {
-                    const isUnlocked = unlockedPlanets.includes(planet.id);
-                    const isSelected = selectedPlanet === planet.id;
-                    const canAfford = credits >= planet.cost;
-                    return (
-                      <div key={planet.id} className="flex gap-2 items-center">
-                        <button
-                          onClick={() => {
-                            if (isUnlocked) {
-                              setSelectedPlanet(planet.id);
-                            }
-                          }}
-                          disabled={missionState === 'mining' || !isUnlocked}
-                          className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left ${
-                            isSelected
-                              ? 'bg-purple-600 text-white border-2 border-purple-400'
-                              : isUnlocked
-                              ? 'bg-gray-800/50 text-gray-300 border border-gray-700 hover:bg-gray-700/50'
-                              : 'bg-gray-900/50 text-gray-600 border border-gray-800 cursor-default'
-                          } ${missionState === 'mining' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>{planet.name}</span>
-                            {isSelected && <span className="text-[9px]">✓</span>}
-                          </div>
-                          {isUnlocked && (
-                            <div className="text-[9px] text-gray-500 mt-0.5">
-                              Multiplicador: {planet.rarityMultiplier.toFixed(1)}x
-                            </div>
-                          )}
-                        </button>
-                        {!isUnlocked && (
-                          <button
-                            onClick={() => unlockPlanet(planet.id)}
-                            disabled={missionState === 'mining' || !canAfford}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                              canAfford
-                                ? 'bg-yellow-600 hover:bg-yellow-500 text-white border border-yellow-400'
-                                : 'bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed'
-                            } ${missionState === 'mining' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            <Icons.Lock size={12} />
-                            <span>Comprar Planeta</span>
-                            <span className="text-[9px] ml-1">({planet.cost.toLocaleString()} ₡)</span>
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
             {/* Mission Control Panel - Bottom Center */}
             <div className="w-full max-w-md mx-auto glass-panel p-5 rounded-3xl border border-blue-500/30 pointer-events-auto shadow-2xl bg-black/80 backdrop-blur-xl animate-[slideUp_0.6s_ease-out]">
-              <div className="mb-4 text-center">
-                <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
-                  {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
-                </p>
-                <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
-                  {currentPlanet?.name} • Multiplicador: {currentPlanet?.rarityMultiplier.toFixed(1)}x
-                </p>
+              
+              {/* Header Area: Planet Info OR Buy Button */}
+              <div className="mb-4 text-center min-h-[60px] flex flex-col justify-center items-center">
+                {isPlanetUnlocked ? (
+                  <>
+                    <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
+                      {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
+                    </p>
+                    <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
+                      {currentPlanet.name}
+                    </h3>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">
+                      Multiplicador: {currentPlanet.rarityMultiplier.toFixed(1)}x
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => unlockPlanet(currentPlanet.id)}
+                    disabled={!canAffordPlanet}
+                    className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                        canAffordPlanet 
+                        ? 'bg-yellow-600 hover:bg-yellow-500 border-yellow-400 text-white animate-pulse'
+                        : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Icons.Lock size={14} />
+                    <div className="flex flex-col items-start leading-none">
+                        <span className="text-[10px]">COMPRAR {currentPlanet.name}</span>
+                        <span className="text-sm font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
+                    </div>
+                  </button>
+                )}
               </div>
 
-              {missionState === 'idle' && (
-                <button onClick={startMission} className="w-full bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 py-4 rounded-2xl font-bold tracking-widest shadow-lg text-white border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 transition-all font-orbitron text-base hover:shadow-blue-500/50">
-                  INICIAR MISIÓN
-                </button>
-              )}
+              {/* Control Row: Arrows & Main Button */}
+              <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => changePlanet(-1)}
+                    disabled={missionState === 'mining'}
+                    className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
+                  >
+                    <Icons.ArrowLeft size={20} />
+                  </button>
 
-              {missionState === 'mining' && (
-                <div className="w-full bg-gray-900/80 h-14 rounded-2xl overflow-hidden relative border border-gray-700/50 shadow-inner backdrop-blur-sm">
-                  <div 
-                    className="h-full bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 animate-pulse transition-all duration-1000" 
-                    style={{ width: `${((1 - timeLeft/totalDuration)*100)}%` }} 
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-900 font-mono tracking-wider text-lg drop-shadow-lg">
-                    T-{timeLeft}s
-                  </span>
-                </div>
-              )}
+                  <div className="flex-1">
+                    {missionState === 'idle' && (
+                        <button 
+                            onClick={startMission} 
+                            disabled={!isPlanetUnlocked}
+                            className={`w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base transition-all ${
+                                isPlanetUnlocked
+                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 text-white border-blue-800 active:border-b-0 active:translate-y-1 hover:shadow-blue-500/50'
+                                : 'bg-gray-800 text-gray-500 border-gray-900 cursor-not-allowed'
+                            }`}
+                        >
+                            {isPlanetUnlocked ? 'INICIAR MISIÓN' : 'BLOQUEADO'}
+                        </button>
+                    )}
 
-              {missionState === 'ready' && (
-                <button onClick={claim} className="w-full bg-gradient-to-r from-green-500 via-green-400 to-green-500 hover:from-green-400 hover:to-green-300 py-4 rounded-2xl font-bold text-gray-900 tracking-widest shadow-[0_0_25px_rgba(74,222,128,0.6)] animate-pulse active:scale-95 transition-all border-b-4 border-green-700 font-orbitron text-base">
-                  RECUPERAR CARGA
-                </button>
-              )}
+                    {missionState === 'mining' && (
+                        <div className="w-full bg-gray-900/80 h-14 rounded-2xl overflow-hidden relative border border-gray-700/50 shadow-inner backdrop-blur-sm">
+                        <div 
+                            className="h-full bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 animate-pulse transition-all duration-1000" 
+                            style={{ width: `${((1 - timeLeft/totalDuration)*100)}%` }} 
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-900 font-mono tracking-wider text-lg drop-shadow-lg">
+                            T-{timeLeft}s
+                        </span>
+                        </div>
+                    )}
+
+                    {missionState === 'ready' && (
+                        <button onClick={claim} className="w-full bg-gradient-to-r from-green-500 via-green-400 to-green-500 hover:from-green-400 hover:to-green-300 py-4 rounded-2xl font-bold text-gray-900 tracking-widest shadow-[0_0_25px_rgba(74,222,128,0.6)] animate-pulse active:scale-95 transition-all border-b-4 border-green-700 font-orbitron text-base">
+                        RECUPERAR CARGA
+                        </button>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => changePlanet(1)}
+                    disabled={missionState === 'mining'}
+                    className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
+                  >
+                    <Icons.ArrowRight size={20} />
+                  </button>
+              </div>
+
             </div>
           </div>
         )}
