@@ -361,51 +361,72 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
         const progress = 1 - (remaining / duration);
         const time = Date.now() * 0.001;
 
-        if(shipRef.current) {
-            let targetZ = 0;
-            let targetRotY = Math.PI / 2; // Idle: Rotación 90 grados inicial
-
-            if (isMining) {
-                // FASE 1: IDA (0% - 40%)
-                if(progress < 0.4) {
-                    targetZ = -200 * (progress / 0.4); 
-                    targetRotY = 0; // Mirar al frente
-                } 
-                // FASE 2: ÓRBITA (40% - 70%)
-                else if(progress < 0.7) {
-                    targetZ = -200;
-                    targetRotY = 0;
-                    shipRef.current.position.y = Math.sin(time * 3) * 1.5;
-                }
-                // FASE 3: REGRESO (70% - 100%)
-                else {
-                    const returnProgress = (progress - 0.7) / 0.3;
-                    targetZ = -200 * (1 - returnProgress); 
-                    targetRotY = Math.PI; 
-                }
-                shipRef.current.position.y += (Math.random()-0.5)*0.05;
-
-                // Interpolación rotación Y
-                let currentY = shipRef.current.rotation.y;
-                if (Math.abs(targetRotY - currentY) > Math.PI) {
-                     if (targetRotY > currentY) currentY += 2 * Math.PI;
-                     else currentY -= 2 * Math.PI;
-                }
-                shipRef.current.rotation.y = THREE.MathUtils.lerp(currentY, targetRotY, 0.04);
-            } 
-            else {
-                // IDLE: Rotación continua
-                targetZ = 0;
-                shipRef.current.rotation.y += 0.005; 
-                shipRef.current.position.y = Math.sin(time * 2) * 0.5;
+        if (shipRef.current) {
+          let targetZ = 0;
+          let targetRotY = shipRef.current.rotation.y;
+        
+          if (isMining) {
+            const shipPos = shipRef.current.position.clone();
+            const planetPos = new THREE.Vector3();
+            if (planetRef.current) planetRef.current.getWorldPosition(planetPos);
+        
+            const toPlanet = planetPos.clone().sub(shipPos);
+            const distance = toPlanet.length();
+        
+            let yawToPlanet = shipRef.current.rotation.y;
+            if (distance > 0.0001) {
+              // La nave apunta en +X
+              yawToPlanet = Math.atan2(toPlanet.z, toPlanet.x);
             }
-
-            shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, targetZ, 0.05);
-            
-            // Inclinación
-            const pitch = isMining ? -0.1 : 0;
-            shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, pitch, 0.05);
+        
+            // FASE 1: IDA
+            if (progress < 0.4) {
+              targetZ = -200 * (progress / 0.4);
+              targetRotY = yawToPlanet;
+            }
+            // FASE 2: ÓRBITA
+            else if (progress < 0.7) {
+              targetZ = -200;
+              targetRotY = yawToPlanet;
+              shipRef.current.position.y = Math.sin(time * 3) * 1.5;
+            }
+            // FASE 3: REGRESO
+            else {
+              const returnProgress = (progress - 0.7) / 0.3;
+              targetZ = -200 * (1 - returnProgress);
+        
+              targetRotY = yawToPlanet + Math.PI;
+              if (targetRotY > Math.PI) targetRotY -= Math.PI * 2;
+            }
+        
+            shipRef.current.position.y += (Math.random() - 0.5) * 0.05;
+        
+            shipRef.current.rotation.y = lerpAngle(
+              shipRef.current.rotation.y,
+              targetRotY,
+              0.06
+            );
+          } else {
+            // IDLE
+            targetZ = 0;
+            shipRef.current.rotation.y += 0.005;
+            shipRef.current.position.y = Math.sin(time * 2) * 0.5;
+          }
+        
+          shipRef.current.position.z = THREE.MathUtils.lerp(
+            shipRef.current.position.z,
+            targetZ,
+            0.05
+          );
+        
+          const pitch = isMining ? -0.1 : 0;
+          shipRef.current.rotation.x = THREE.MathUtils.lerp(
+            shipRef.current.rotation.x,
+            pitch,
+            0.05
+          );
         }
+        
 
         // Cámara Follow
         if (cameraRef.current && shipRef.current) {
