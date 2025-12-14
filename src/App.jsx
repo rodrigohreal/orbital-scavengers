@@ -187,12 +187,6 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
   };
 
   useEffect(() => {
-    // Variables para el nuevo comportamiento
-    let previousRotY = 0; // Para el banking
-    let orbitAngle = 0; // Para la órbita elíptica
-    let warpProgress = 0; // Para la aceleración progresiva tipo warp
-    const CINEMATIC_EASING = 0.025; // Easing más lento para la cámara cinematográfica
-    
     // 1. SETUP
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x0a0a20, 0.005); 
@@ -234,130 +228,128 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
 
     // 4. NAVE (Estilo Toon Morado)
     const shipGroup = new THREE.Group();
-    shipRef.current = shipGroup; // Asignar la referencia
     // Materiales
     const purpleMat = new THREE.MeshToonMaterial({ color: 0x8A2BE2 });
     const blackMat = new THREE.MeshToonMaterial({ color: 0x111111 });
-    const glassMat = new THREE.MeshToonMaterial({ color: 0x88ccff, transparent: true, opacity: 0.7 });
+    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88ccff, roughness: 0.2, metalness: 0.9, transmission: 0.9, transparent: true });
+    const silverMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.8, roughness: 0.3 });
 
-    // Cuerpo principal
-    const bodyGeo = new THREE.BoxGeometry(3, 1.5, 1);
+    // Cuerpo (Esfera alargada)
+    const bodyGeo = new THREE.SphereGeometry(1, 32, 32);
     const body = new THREE.Mesh(bodyGeo, purpleMat);
+    body.scale.set(1.8, 1, 1);
     shipGroup.add(body);
-    
-    // Cabina de cristal
-    const cabGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.2, 8);
-    const cab = new THREE.Mesh(cabGeo, glassMat);
-    cab.rotation.x = Math.PI / 2;
-    cab.position.set(1.5, 0.4, 0);
-    shipGroup.add(cab);
 
-    // Alas (estilo simple)
-    const wingShape = new THREE.Shape();
-    wingShape.moveTo(0, 0);
-    wingShape.lineTo(-1.5, 0);
-    wingShape.lineTo(-1.5, 0.5);
-    wingShape.lineTo(0, 0.2);
-    const extrudeSettings = { depth: 0.1, bevelEnabled: false };
-    const wingGeo = new THREE.ExtrudeGeometry(wingShape, extrudeSettings);
+    // Bandas Negras (Toroides)
+    const band1 = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.06, 16, 64), blackMat);
+    band1.rotation.y = Math.PI/2;
+    shipGroup.add(band1);
     
-    const wingLeft = new THREE.Mesh(wingGeo, blackMat);
-    wingLeft.rotation.z = Math.PI/2;
-    wingLeft.rotation.x = Math.PI/6;
-    wingLeft.position.set(1.0, 0.4, 0.25);
-    shipGroup.add(wingLeft);
+    const band2 = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.06, 16, 64), blackMat);
+    band2.rotation.y = Math.PI/2;
+    band2.position.x = 0.8;
+    shipGroup.add(band2);
+    
+    const band3 = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.06, 16, 64), blackMat);
+    band3.rotation.y = Math.PI/2;
+    band3.position.x = -0.8;
+    shipGroup.add(band3);
+    
+    const band4 = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 16, 64), blackMat);
+    band4.rotation.x = Math.PI/2;
+    band4.scale.set(1.8, 1, 1);
+    shipGroup.add(band4);
 
-    const wingRight = wingLeft.clone();
-    wingRight.rotation.x = -Math.PI/6;
-    wingRight.position.set(1.0, 0.4, -0.25);
-    shipGroup.add(wingRight);
+    // Cabina
+    const winLeft = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.4, 4, 8), glassMat);
+    winLeft.rotation.z = Math.PI/2;
+    winLeft.rotation.x = Math.PI/6;
+    winLeft.position.set(1.0, 0.4, 0.25);
+    shipGroup.add(winLeft);
+    const winRight = winLeft.clone();
+    winRight.position.set(1.0, 0.4, -0.25);
+    shipGroup.add(winRight);
 
     // Aleta Superior
     const finShape = new THREE.Shape();
-    finShape.moveTo(0,0);
-    finShape.quadraticCurveTo(0.5, 0.5, 0.5, 1.0);
-    finShape.lineTo(-0.8, 0.8);
-    finShape.quadraticCurveTo(-0.5, 0.4, -0.8, 0);
+    finShape.moveTo(0,0); finShape.quadraticCurveTo(0.5, 0.5, 0.5, 1.0); finShape.lineTo(-0.8, 0.8); finShape.quadraticCurveTo(-0.5, 0.4, -0.8, 0);
+    const fin = new THREE.Mesh(new THREE.ExtrudeGeometry(finShape, { depth: 0.1, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05 }), purpleMat);
+    fin.position.set(-0.5, 0.85, -0.05); shipGroup.add(fin);
 
-    const fin = new THREE.Mesh(new THREE.ExtrudeGeometry(finShape, { depth: 0.1, bevelEnabled: false }), purpleMat);
-    fin.rotation.y = Math.PI/2;
-    fin.position.set(-1.0, 1.25, 0);
-    shipGroup.add(fin);
-    
-    // Motor (Luz)
-    const engineLight = new THREE.PointLight(0xffaa00, 5, 50); // Color, Intensidad, Distancia
-    engineLight.position.set(-1.5, 0, 0);
-    shipGroup.add(engineLight);
-    engineLightRef.current = engineLight;
+    // Alas Laterales
+    const wingGeo = new THREE.BoxGeometry(1.0, 0.1, 0.8);
+    const wingL = new THREE.Mesh(wingGeo, purpleMat);
+    wingL.position.set(-0.5, -0.5, 0.8); wingL.rotation.set(0.5, 0, 0.2); shipGroup.add(wingL);
+    const wingR = new THREE.Mesh(wingGeo, purpleMat);
+    wingR.position.set(-0.5, -0.5, -0.8); wingR.rotation.set(-0.5, 0, 0.2); shipGroup.add(wingR);
 
-    shipGroup.rotation.y = Math.PI * 0.5; // Orientar la nave hacia -Z (hacia el frente)
+    // Motor
+    const engine = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.6, 32), silverMat);
+    engine.rotation.z = Math.PI/2;
+    engine.position.set(-1.8, 0, 0);
+    shipGroup.add(engine);
+
+    // Luz Motor (PointLight)
+    const engLight = new THREE.PointLight(0xffaa00, 0, 10);
+    engLight.position.set(-2.5, 0, 0); scene.add(engLight);
+    engineLightRef.current = engLight;
+
+    // Rotación inicial de 90 grados en el eje Y
+    shipGroup.rotation.y = Math.PI / 2;
+
     scene.add(shipGroup);
+    shipRef.current = shipGroup;
 
-    // 5. PLANETA / DESTINO
-    const targetPlanet = PLANETS[planet];
-    const noiseTexture = createNoiseTexture(targetPlanet.style.planetColor1, targetPlanet.style.planetColor2);
-
-    const planetGeo = new THREE.SphereGeometry(6, 64, 64);
-    const planetMat = new THREE.MeshStandardMaterial({ 
-        map: noiseTexture,
-        roughness: 0.8,
-        metalness: 0.1
-    });
-    const planetMesh = new THREE.Mesh(planetGeo, planetMat);
-    planetRef.current = planetMesh;
-    planetMesh.position.set(0, 0, 0); // Centro de la escena
-    scene.add(planetMesh);
-
-    // Atmósfera (Utiliza el color del planeta)
-    const atmosphereMat = new THREE.MeshBasicMaterial({
-        color: targetPlanet.style.atmosphereColor,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.BackSide 
-    });
-    const atmosphereMesh = new THREE.Mesh(new THREE.SphereGeometry(6.3, 64, 64), atmosphereMat);
-    scene.add(atmosphereMesh);
-
-    // Anillos (Opcional, según configuración del planeta)
-    if (targetPlanet.style.hasRings) {
-      const ringGeo = new THREE.RingGeometry(8, 10, 64);
-      const ringMat = new THREE.MeshBasicMaterial({ 
-          color: targetPlanet.style.ringColor, 
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.4
-      });
-      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-      ringMesh.rotation.x = Math.PI / 2;
-      scene.add(ringMesh);
-    }
+    // 5. PLANETA LEJANO
+    const planetGroup = new THREE.Group();
+    const planetId = planet?.id ?? 0;
+    const planetData = PLANETS[planetId] || PLANETS[0];
+    const pTex = createNoiseTexture(planetData.style.planetColor1, planetData.style.planetColor2);
+    const planetMat = new THREE.MeshStandardMaterial({ map: pTex, roughness: 0.8 });
+    const planetMesh = new THREE.Mesh(new THREE.SphereGeometry(60, 64, 64), planetMat);
+    planetGroup.add(planetMesh);
     
-    // 6. FONDO DE ESTRELLAS (Partículas)
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = 5000;
-    const starPositions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i += 3) {
-        // Distribución en un cubo grande alrededor de la escena
-        starPositions[i] = (Math.random() - 0.5) * 1000; // X
-        starPositions[i + 1] = (Math.random() - 0.5) * 1000; // Y
-        starPositions[i + 2] = (Math.random() - 0.5) * 1000; // Z
+    // Atmósfera
+    const atmoMat = new THREE.MeshBasicMaterial({ color: planetData.style.atmosphereColor, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, side: THREE.BackSide });
+    const atmo = new THREE.Mesh(new THREE.SphereGeometry(64, 64, 64), atmoMat);
+    planetGroup.add(atmo);
+
+    // Anillos (solo si el planeta los tiene)
+    if (planetData.style.hasRings) {
+      const ringGeo = new THREE.RingGeometry(80, 110, 64);
+      const ringMat = new THREE.MeshBasicMaterial({ color: planetData.style.ringColor, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+      const rings = new THREE.Mesh(ringGeo, ringMat);
+      rings.rotation.x = Math.PI / 2.5;
+      planetGroup.add(rings);
     }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true });
-    starsRef.current = new THREE.Points(starGeo, starMat);
-    scene.add(starsRef.current);
+    // Posición: Lejos en el eje Z negativo
+    planetGroup.position.set(0, 10, -300);
+    scene.add(planetGroup);
+    planetRef.current = planetGroup;
 
+    // 6. ESTRELLAS (Fondo)
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 3000;
+    const starPos = new Float32Array(starCount * 3);
+    for(let i=0; i<starCount*3; i++) starPos[i] = (Math.random()-0.5) * 1000;
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 1.0 });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+    starsRef.current = stars;
 
-    // 7. PARTÍCULAS DE MINERÍA/EFECTO WARP (Simulación de escombros/velocidad)
+    // 7. PARTICULAS (Fuego Motor)
+    // Usamos AdditiveBlending para que se vean brillantes y no se oculten
     const pGeo = new THREE.SphereGeometry(0.2, 4, 4);
     const pMat = new THREE.MeshBasicMaterial({ 
         color: 0xffaa00, 
         transparent: true, 
-        opacity: 0.8, 
-        blending: THREE.AdditiveBlending, 
-        depthWrite: false // CRUCIAL para que no se oculten entre sí o con el fondo incorrectamente 
-    }); 
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false // CRUCIAL para que no se oculten entre sí o con el fondo incorrectamente
+    });
+
     // Pool de partículas
     particles.current = [];
     for(let i=0; i<80; i++) {
@@ -367,7 +359,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
         particles.current.push({ mesh: m, life: 0, velocity: new THREE.Vector3() });
     }
 
-    // Cámara Inicial (Será ajustada inmediatamente por la animación)
+    // Cámara Inicial
     camera.position.set(0, 3, 12);
     camera.lookAt(0, 0, 0);
 
@@ -375,181 +367,174 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
     let animId;
     const animate = () => {
         animId = requestAnimationFrame(animate);
-        const time = performance.now() * 0.001;
-
+        
         const isMining = window.missionActive;
+        const duration = window.totalTime || 1;
+        const remaining = window.currentTime || 0;
+        const progress = 1 - (remaining / duration);
+        const time = Date.now() * 0.001;
 
-        // Aceleración progresiva tipo warp: Easing de 0 a 1 o de 1 a 0
-        warpProgress = THREE.MathUtils.lerp(warpProgress, isMining ? 1 : 0, 0.02);
+        // -- ANIMACIÓN NAVE --
+        if(shipRef.current) {
+            let targetZ = 0;
+            let targetRotY = 0;
+            let targetBank = 0;
 
-        // -- ANIMACIÓN DE LA NAVE --
-        if (shipRef.current && engineLightRef.current) {
-            let targetBank = 0; // Para el roll automático
+            if (isMining) {
+                // Durante la misión, dejamos de girar "artísticamente" y volamos
 
-            if (!isMining) {
-                // Modo IDLE (Órbita alrededor del planeta)
-                // Reiniciar la posición XZ de la nave si se estaba moviendo
-                shipRef.current.position.x = THREE.MathUtils.lerp(shipRef.current.position.x, 0, 0.08);
-                shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, 0, 0.08);
-
-                // --- Órbita real elíptica ---
-                orbitAngle += 0.005; // Velocidad de órbita
+                // FASE 1: IDA (0% - 40%) - Viajar hacia el planeta lejano
+                if(progress < 0.4) {
+                    targetZ = -200 * (progress / 0.4); 
+                    targetRotY = Math.PI / 2; // Rotado 90 grados en el eje Y
+                    targetBank = 0.2; // Inclinación ligera
+                } 
+                // FASE 2: ÓRBITA (40% - 70%)
+                else if(progress < 0.7) {
+                    targetZ = -200;
+                    targetRotY = Math.PI / 2; // Rotado 90 grados en el eje Y
+                    // Flotación en órbita
+                    shipRef.current.position.y = Math.sin(time * 3) * 1.5;
+                }
+                // FASE 3: REGRESO (70% - 100%)
+                else {
+                    const returnProgress = (progress - 0.7) / 0.3;
+                    targetZ = -200 * (1 - returnProgress); 
+                    targetRotY = Math.PI / 2 + Math.PI; // Rotado 90 grados + 180 grados = 270 grados para regresar
+                    targetBank = -0.2;
+                }
                 
-                const a = 15; // Semieje mayor
-                const e = 0.5; // Excentricidad (0.5 hace una elipse notable)
+                // Vibración de motor
+                shipRef.current.position.y += (Math.random()-0.5)*0.05;
 
-                // Fórmula de órbita (simulación simple)
-                const r = a / (1 + e * Math.cos(orbitAngle));
-                
-                shipRef.current.position.x = r * Math.cos(orbitAngle);
-                shipRef.current.position.z = r * Math.sin(orbitAngle);
-                shipRef.current.position.y = 1.5 + Math.sin(time * 0.5) * 0.2; // Movimiento vertical suave
-
-                shipRef.current.lookAt(0, 0, 0); // La nave mira al centro de la órbita (el planeta)
-
-                // Resetear roll y pitch
-                shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, 0, 0.05);
-                targetBank = 0; // Sin banking en órbita
-
-                // Luz del motor en estado normal
-                engineLightRef.current.intensity = THREE.MathUtils.lerp(engineLightRef.current.intensity, 5, 0.1);
-                
             } else {
-                // Modo VIAJE/MINERÍA
-                // La nave se centra para el efecto warp
-                shipRef.current.position.x = THREE.MathUtils.lerp(shipRef.current.position.x, 0, 0.1);
-                shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, 0, 0.1);
-                shipRef.current.position.y = THREE.MathUtils.lerp(shipRef.current.position.y, 0, 0.1);
-                
-                // YAW (Giro en Y)
-                const currentY = shipRef.current.rotation.y;
-                let targetRotY = currentY + (0.05 * Math.sin(time * 0.0005));
-                
+                // IDLE: Rotación continua de exhibición
+                targetZ = 0;
+                shipRef.current.rotation.y += 0.005; // ROTACIÓN CONTINUA
+                shipRef.current.position.y = Math.sin(time * 2) * 0.5; 
+                targetBank = 0;
+            }
+
+            // Aplicar posiciones interpoladas
+            shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, targetZ, 0.05);
+            
+            // Solo interpolamos rotación Y si estamos en misión (para las vueltas)
+            // Si estamos en idle, la rotación es continua (+=)
+            if (isMining) {
+                let currentY = shipRef.current.rotation.y;
                 // Normalizar para evitar giros locos
                 if (Math.abs(targetRotY - currentY) > Math.PI) {
-                    if (targetRotY > currentY) targetRotY -= 2 * Math.PI; 
-                    else targetRotY += 2 * Math.PI;
+                     if (targetRotY > currentY) currentY += 2 * Math.PI;
+                     else currentY -= 2 * Math.PI;
                 }
-                
-                // Interpolación
                 shipRef.current.rotation.y = THREE.MathUtils.lerp(currentY, targetRotY, 0.04);
-                
-                // --- Banking automático (roll al girar) ---
-                let deltaRotY = shipRef.current.rotation.y - previousRotY;
-                if (deltaRotY > Math.PI) deltaRotY -= 2 * Math.PI;
-                if (deltaRotY < -Math.PI) deltaRotY += 2 * Math.PI;
-                
-                // targetBank es proporcional a la velocidad de giro (delta)
-                targetBank = THREE.MathUtils.clamp(-deltaRotY * 30, -0.7, 0.7); // Factor negativo para un roll natural
-                
-                // Pitch (Cabeceo) al acelerar
-                const pitch = -0.1 * warpProgress; // Pitch se aplica gradualmente con el warp
-                shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, pitch, 0.05);
-
-                // Luz del motor: Aumenta la intensidad con el progreso del warp
-                engineLightRef.current.intensity = THREE.MathUtils.lerp(engineLightRef.current.intensity, 25 * warpProgress + 5, 0.05);
             }
 
-            // Actualiza la posición anterior para el banking en el siguiente frame
-            previousRotY = shipRef.current.rotation.y;
-
-            // BANKING (Roll en Z)
-            shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, targetBank, 0.08); 
+            shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, targetBank, 0.05);
+            
+            // Pitch (Cabeceo) al acelerar
+            const pitch = isMining ? -0.1 : 0;
+            shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, pitch, 0.05);
         }
-
-        // -- PARTÍCULAS (Se ven más rápido en modo warp) --
-        particles.current.forEach(p => {
-            if (isMining) {
-                if (p.life <= 0) {
-                    p.mesh.visible = true;
-                    p.life = Math.random() * 50 + 20;
-                    // Generar en un cono detrás del motor
-                    const angle = (Math.random() - 0.5) * Math.PI * 0.2;
-                    const r = Math.random() * 0.5;
-                    p.mesh.position.set(-1.5 + Math.cos(angle) * r, Math.sin(angle) * r, (Math.random() - 0.5) * 0.5);
-                    p.mesh.position.applyQuaternion(shipRef.current.quaternion); // Alinear con la rotación de la nave
-                    p.mesh.position.add(shipRef.current.position);
-                    p.velocity.set(0, 0, -20); // Velocidad inicial alta
-                    p.velocity.applyQuaternion(shipRef.current.quaternion);
-                    // Añadir un poco de aleatoriedad
-                    p.velocity.x += (Math.random() - 0.5) * 2;
-                    p.velocity.y += (Math.random() - 0.5) * 2;
-                    p.velocity.z += (Math.random() - 0.5) * 2;
-                }
-                
-                // La velocidad aumenta con el progreso del warp
-                const speedMultiplier = 1 + warpProgress * 2;
-                p.mesh.position.addScaledVector(p.velocity, 0.01 * speedMultiplier);
-                p.mesh.material.opacity = p.life / 70;
-                p.life--;
-            } else {
-                p.life = 0;
-                p.mesh.visible = false;
-            }
-        });
 
         // -- CÁMARA --
         if (cameraRef.current && shipRef.current) {
-            // --- Cámara cinematográfica con easing ---
-            const SHIP_POS = shipRef.current.position;
-            const CAMERA_EASING = isMining ? CINEMATIC_EASING : 0.05; // Un poco más rápida en idle para que siga el orbit
-
-            if (!isMining) {
-                // Modo IDLE: La cámara sigue a la nave orbitando
-                const idealZOffset = 15;
-                const idealY = 3; 
-
-                // Calcular posición ideal de la cámara como si mirara la nave desde 'detrás'
-                const cameraDirection = SHIP_POS.clone().sub(new THREE.Vector3(0,0,0)).normalize().multiplyScalar(idealZOffset);
-                const idealPosition = SHIP_POS.clone().add(cameraDirection.multiplyScalar(-1)); // Posición detrás del punto de órbita
-                idealPosition.y = idealY; // Mantener altura
-                
-                // Interpolación suave de la posición
-                cameraRef.current.position.lerp(idealPosition, CINEMATIC_EASING);
-                cameraRef.current.lookAt(SHIP_POS.x, SHIP_POS.y, SHIP_POS.z); // Siempre mira a la nave
-
+            if (isMining) {
+                // Cámara de seguimiento
+                const idealZ = shipRef.current.position.z + 15; 
+                const idealY = 4;
+                cameraRef.current.position.z = THREE.MathUtils.lerp(cameraRef.current.position.z, idealZ, 0.05);
+                cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, idealY, 0.05);
             } else {
-                // Modo Viaje/Minería
-                
-                // --- Aceleración progresiva tipo warp: Aumentar la distancia ideal con el progreso
-                const idealZ = SHIP_POS.z + 12 + (15 * warpProgress); // De 12 a 27 unidades de distancia
-                const idealY = 4 + (1 * warpProgress); // Subir la cámara un poco (de 4 a 5)
-                const idealX = SHIP_POS.x + (Math.sin(time * 0.5) * 0.5); // Movimiento lateral suave
-
-                cameraRef.current.position.z = THREE.MathUtils.lerp(cameraRef.current.position.z, idealZ, CINEMATIC_EASING);
-                cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, idealY, CINEMATIC_EASING);
-                cameraRef.current.position.x = THREE.MathUtils.lerp(cameraRef.current.position.x, idealX, CINEMATIC_EASING);
-                
-                cameraRef.current.lookAt(SHIP_POS.x, SHIP_POS.y, SHIP_POS.z);
+                // Cámara de exhibición (Idle)
+                cameraRef.current.position.z = THREE.MathUtils.lerp(cameraRef.current.position.z, 12, 0.05);
+                cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, 3, 0.05);
             }
+            cameraRef.current.lookAt(shipRef.current.position.x, 0, shipRef.current.position.z - 10);
         }
 
-        // Animación del planeta (rotación)
-        if (planetRef.current) {
-            planetRef.current.rotation.y += 0.001;
+        // -- PLANETA --
+        if(planetRef.current) planetRef.current.rotation.y += 0.0005;
+
+        // -- ESTRELLAS (Efecto velocidad) --
+        if(starsRef.current) {
+            const speed = isMining ? 3 : 0.1;
+            const pos = starsRef.current.geometry.attributes.position.array;
+            for(let i=0; i<3000; i++) {
+                pos[i*3] -= speed;
+                if(pos[i*3] < -500) pos[i*3] = 500;
+            }
+            starsRef.current.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // -- PARTÍCULAS (FUEGO MEJORADO) --
+        const pList = particles.current;
+        // Más partículas y más grandes si está minando
+        const spawnRate = isMining ? 0.8 : 0.3;
+        const fireScale = isMining ? 2.0 : 0.8;
+        const fireColor = isMining ? 0x00ffff : 0xff5500; // Azul (Turbo) vs Naranja (Idle)
+        
+        // Spawnear nuevas
+        if(Math.random() < spawnRate) {
+            const p = pList.find(x => x.life <= 0);
+            if(p && shipRef.current) {
+                p.life = 1;
+                p.mesh.visible = true;
+                
+                // Nacer en el motor (-1.8 en X local)
+                const offset = new THREE.Vector3(-1.8, 0, 0); 
+                offset.applyEuler(shipRef.current.rotation);
+                p.mesh.position.copy(shipRef.current.position).add(offset);
+                
+                // Velocidad hacia atrás
+                const speed = isMining ? 0.8 : 0.2;
+                const vel = new THREE.Vector3(-speed - Math.random()*0.2, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1);
+                vel.applyEuler(shipRef.current.rotation);
+                p.velocity.copy(vel);
+
+                p.mesh.material.color.setHex(fireColor);
+                p.mesh.material.opacity = 1; // Reset opacity
+            }
+        }
+        
+        // Actualizar existentes
+        pList.forEach(p => {
+            if(p.life > 0) {
+                p.life -= 0.03;
+                p.mesh.position.add(p.velocity);
+                p.mesh.scale.setScalar(p.life * fireScale); 
+                p.mesh.material.opacity = p.life;
+                if(p.life <= 0) p.mesh.visible = false;
+            }
+        });
+
+        // Luz Motor
+        if (engineLightRef.current) {
+            const intensity = isMining ? 8 : 2 + Math.sin(time * 5);
+            engineLightRef.current.intensity = THREE.MathUtils.lerp(engineLightRef.current.intensity, intensity, 0.1);
+            engineLightRef.current.color.setHex(fireColor);
         }
 
         composer.render();
     };
-
     animate();
 
-    // -- RESIZE --
     const handleResize = () => {
-      cameraRef.current.aspect = window.innerWidth / window.innerHeight;
-      cameraRef.current.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      composer.setSize(window.innerWidth, window.innerHeight);
+        if (!cameraRef.current || !mountRef.current) return;
+        cameraRef.current.aspect = window.innerWidth / window.innerHeight;
+        cameraRef.current.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animId);
-      if(mountRef.current) mountRef.current.innerHTML = '';
-      renderer.dispose();
+        window.removeEventListener('resize', handleResize);
+        cancelAnimationFrame(animId);
+        if(mountRef.current) mountRef.current.innerHTML = '';
+        renderer.dispose();
     };
-  }, [level, planet]); // Dependencias
+  }, [level, planet]);
 
   // Sync Vars
   useEffect(() => {
@@ -563,57 +548,62 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
 
 // --- MODAL RECOMPENSA ---
 const RewardModal = ({ item, onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-    <div className="bg-gray-900 p-6 rounded-2xl shadow-2xl border-2 border-green-500/50 max-w-sm w-full text-white text-center font-orbitron transform scale-100 transition-all duration-300">
-      <div className="text-3xl mb-4 font-extrabold text-green-400">¡Misión Exitosa!</div>
-      <p className="text-sm mb-6 text-gray-400">Has minado un nuevo recurso:</p>
-      
-      <div className="flex items-center justify-center gap-4 bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6">
-        <div className={`text-4xl w-16 h-16 flex items-center justify-center rounded-xl border border-white/5 shadow-inner`}>{item.icon}</div>
-        <div>
-          <h3 className={`font-bold text-lg leading-tight ${item.style}`}>{item.name}</h3>
-          <span className={`text-[10px] uppercase tracking-wider font-bold bg-white/5 px-2 py-0.5 rounded mt-1 inline-block text-gray-400`}>{item.rarity}</span>
-        </div>
-        <div className="text-right">
-          <div className="text-xl font-mono text-white font-bold tracking-tight">+{item.val.toLocaleString()}₡</div>
-          <div className="text-xs text-gray-500 mt-1 font-mono">Valor</div>
-        </div>
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl animate-[pop_0.4s_ease-out] p-4" onClick={onClose}>
+    <div className={`relative bg-gray-900/90 border-2 ${item.border} rounded-3xl p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(0,0,0,0.8)]`} onClick={e => e.stopPropagation()}>
+      <div className={`absolute inset-0 rounded-3xl opacity-20 bg-gradient-to-tr from-transparent via-${item.style.split('-')[1]}-500 to-transparent animate-pulse pointer-events-none`}></div>
+      <h2 className="text-2xl font-bold text-white mb-8 font-orbitron tracking-[0.2em] border-b border-white/10 pb-4">RECOMPENSA</h2>
+      <div className="text-9xl mb-6 animate-bounce drop-shadow-2xl">{item.icon}</div>
+      <div className="space-y-2 mb-8">
+        <h3 className={`text-3xl font-bold font-orbitron ${item.style} drop-shadow-md`}>{item.name}</h3>
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest bg-white/5 border ${item.border} ${item.style}`}>
+          {item.rarity}
+        </span>
       </div>
-
-      <button
-        onClick={onClose}
-        className="w-full py-3 rounded-xl font-bold tracking-widest bg-green-600 hover:bg-green-500 transition-all active:scale-95 shadow-lg shadow-green-500/30"
-      >
-        RECLAMAR
+      <div className="bg-black/50 rounded-2xl p-4 mb-8 border border-white/5">
+        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Valor Estimado</p>
+        <p className="text-4xl font-mono font-bold text-yellow-400 drop-shadow-lg">+{item.val.toLocaleString()} ₡</p>
+      </div>
+      <button onClick={onClose} className="w-full bg-white text-black hover:bg-gray-200 py-4 rounded-xl font-bold text-lg tracking-widest font-orbitron shadow-xl active:scale-95 transition-all">
+        ACEPTAR
       </button>
     </div>
   </div>
 );
 
-// --- COMPONENTE PRINCIPAL ---
+// --- APP PRINCIPAL ---
 export default function App() {
-  const [credits, setCredits] = useState(500);
-  const [droneLevel, setDroneLevel] = useState(1);
-  const [inventory, setInventory] = useState([]);
-  const [missionState, setMissionState] = useState('idle'); // 'idle', 'mining', 'reward'
+  const [activeTab, setActiveTab] = useState('home');
+  const [credits, setCredits] = useState(() => parseInt(localStorage.getItem('os_ultra_credits')) || 500);
+  const [droneLevel, setDroneLevel] = useState(() => parseInt(localStorage.getItem('os_ultra_level')) || 1);
+  const [inventory, setInventory] = useState(() => JSON.parse(localStorage.getItem('os_ultra_inv')) || []);
+  const [missionState, setMissionState] = useState('idle'); 
   const [timeLeft, setTimeLeft] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(10);
-  const [rewardItem, setRewardItem] = useState(null);
-  const [activeTab, setActiveTab] = useState('home'); // 'home', 'shop', 'inventory'
-  const [selectedPlanet, setSelectedPlanet] = useState(0);
-  const [unlockedPlanets, setUnlockedPlanets] = useState([0]);
+  const [totalDuration, setTotalDuration] = useState(0);
+  const [reward, setReward] = useState(null);
+  const [selectedPlanet, setSelectedPlanet] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_planet');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [unlockedPlanets, setUnlockedPlanets] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_unlocked_planets');
+    return saved ? JSON.parse(saved) : [0]; // Planet 0 (Sistema Solar) is always unlocked
+  });
 
-  // Manejo del temporizador de la misión
   useEffect(() => {
-    let interval = null;
+    localStorage.setItem('os_ultra_credits', credits);
+    localStorage.setItem('os_ultra_level', droneLevel);
+    localStorage.setItem('os_ultra_inv', JSON.stringify(inventory));
+    localStorage.setItem('os_ultra_planet', selectedPlanet);
+    localStorage.setItem('os_ultra_unlocked_planets', JSON.stringify(unlockedPlanets));
+  }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets]);
+
+  useEffect(() => {
+    let interval;
     if (missionState === 'mining' && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft(t => t - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && missionState === 'mining') {
-      clearInterval(interval);
-      claim();
-      setMissionState('reward');
+      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (missionState === 'mining' && timeLeft === 0) {
+      setMissionState('ready');
+      if(navigator.vibrate) navigator.vibrate(200);
     }
     return () => clearInterval(interval);
   }, [missionState, timeLeft]);
@@ -633,55 +623,72 @@ export default function App() {
     const planetMultiplier = currentPlanet?.rarityMultiplier || 1.0;
     
     const adjustedItems = ITEMS_DB.map(i => {
-        let weight = i.chance;
-        // Apply planet multiplier (more expensive planets = higher rare item chances)
-        if(i.rarity === "Común") {
-            weight /= (1 + levelFactor);
-            weight /= planetMultiplier; // Reduce common items on better planets
-        }
-        if(i.rarity === "Poco Común") {
-            weight *= (1 + levelFactor * 0.5);
-            weight *= planetMultiplier * 0.5;
-        }
-        if(i.rarity === "Raro") {
-            weight *= (1 + levelFactor * 1.0);
-            weight *= planetMultiplier * 1.0;
-        }
-        if(i.rarity === "Épico") {
-            weight *= (1 + levelFactor * 1.5);
-            weight *= planetMultiplier * 1.5;
-        }
-        if(i.rarity === "Legendario" || i.rarity === "Mítico") {
-            weight *= (1 + levelFactor * 2.0);
-            weight *= planetMultiplier * 2.0;
-        }
-        
-        return { ...i, adjustedChance: Math.max(0.00001, weight) };
-    });
-
-    const totalChance = adjustedItems.reduce((sum, i) => sum + i.adjustedChance, 0);
-    let cumulativeChance = 0;
-    
-    // Reroll hasta que se seleccione un item
-    for(let i of adjustedItems) {
-      cumulativeChance += i.adjustedChance / totalChance;
-      if (roll <= cumulativeChance) {
-        item = i;
-        break;
+      let weight = i.chance;
+      // Apply planet multiplier (more expensive planets = higher rare item chances)
+      if(i.rarity === "Común") {
+        weight /= (1 + levelFactor);
+        weight /= planetMultiplier; // Reduce common items on better planets
       }
+      if(i.rarity === "Poco Común") {
+        weight *= (1 + levelFactor * 0.3);
+        weight *= planetMultiplier * 0.5; // Slight boost
+      }
+      if(i.rarity === "Raro" || i.rarity === "Épico") {
+        weight *= (1 + levelFactor * 0.5);
+        weight *= planetMultiplier; // Good boost
+      }
+      if(i.rarity === "Legendario") {
+        weight *= (1 + levelFactor);
+        weight *= planetMultiplier * 1.5; // Strong boost
+      }
+      if(i.rarity === "Mítico") {
+        weight *= (1 + levelFactor * 1.5);
+        weight *= planetMultiplier * 2.0; // Very strong boost
+      }
+      return { ...i, weight };
+    });
+    let totalWeight = adjustedItems.reduce((sum, i) => sum + i.weight, 0);
+    let random = roll * totalWeight;
+    for(let i of adjustedItems) {
+      random -= i.weight;
+      if(random <= 0) { item = i; break; }
     }
-
-    setRewardItem(item);
-    setInventory(i => [...i, item]);
-  };
-
-  const closeReward = () => {
-    setRewardItem(null);
+    const newItem = { ...item, id: Date.now() };
+    setInventory(prev => [...prev, newItem]);
+    setReward(newItem);
     setMissionState('idle');
   };
 
+  const unlockPlanet = (planetId) => {
+    const planet = PLANETS[planetId];
+    if (!planet || unlockedPlanets.includes(planetId)) return;
+    if (credits >= planet.cost) {
+      setCredits(prev => prev - planet.cost);
+      setUnlockedPlanets(prev => [...prev, planetId]);
+      setSelectedPlanet(planetId);
+    }
+  };
+
+  // --- NAVIGATION ---
+  const changePlanet = (dir) => {
+    if (missionState === 'mining') return;
+    setSelectedPlanet(prev => {
+        const next = prev + dir;
+        if (next < 0) return PLANETS.length - 1;
+        if (next >= PLANETS.length) return 0;
+        return next;
+    });
+  };
+
+  const sellEverything = () => {
+    if(inventory.length === 0) return;
+    const totalVal = inventory.reduce((acc, item) => acc + item.val, 0);
+    setCredits(prev => prev + totalVal);
+    setInventory([]);
+  };
+
   const sellItem = (item, all = false) => {
-    if(all) {
+    if (all) {
       const toSell = inventory.filter(i => i.name === item.name);
       const keep = inventory.filter(i => i.name !== item.name);
       const val = toSell.reduce((a, b) => a + b.val, 0);
@@ -706,22 +713,6 @@ export default function App() {
     }
   }
 
-  const buyPlanet = (planetId, cost) => {
-    if(credits >= cost) {
-      setCredits(c => c - cost);
-      setUnlockedPlanets(prev => [...prev, planetId]);
-    }
-  }
-
-  const changePlanet = (direction) => {
-    setSelectedPlanet(prev => {
-        let newIdx = prev + direction;
-        if(newIdx < 0) newIdx = PLANETS.length - 1;
-        if(newIdx >= PLANETS.length) newIdx = 0;
-        return newIdx;
-    });
-  }
-
   const groupedInv = useMemo(() => {
     const map = {};
     inventory.forEach(i => {
@@ -734,215 +725,221 @@ export default function App() {
 
   const currentPlanet = PLANETS[selectedPlanet];
   const isPlanetUnlocked = unlockedPlanets.includes(currentPlanet.id);
-  const canUpgrade = credits >= droneLevel * 250;
-  const isMining = missionState === 'mining';
+  const canAffordPlanet = credits >= currentPlanet.cost;
 
-  // --- RENDERIZADO ---
   return (
-    <div className="min-h-screen bg-black text-white font-sans relative overflow-hidden">
+    <div className="relative w-full h-screen overflow-hidden bg-black text-white font-rajdhani select-none">
+      <Scene3D missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
       
-      {/* 3D Scene */}
-      <Scene3D 
-        missionState={missionState} 
-        level={droneLevel} 
-        totalDuration={totalDuration} 
-        timeLeft={timeLeft} 
-        planet={selectedPlanet}
-      />
-
-      {/* Reward Modal */}
-      {rewardItem && <RewardModal item={rewardItem} onClose={closeReward} />}
-
-      {/* Overlay UI */}
-      <div className="absolute inset-0 z-10 flex flex-col p-4 pointer-events-none">
+      {/* UI LAYER */}
+      <div className="absolute inset-0 flex flex-col justify-between z-10 pointer-events-none">
         
-        {/* Top Bar: Stats */}
-        <div className="flex justify-between items-start pointer-events-auto">
-          <div className="flex flex-col bg-black/50 backdrop-blur-sm p-3 rounded-xl border border-white/10 shadow-lg">
-            <div className="flex items-center gap-2 text-xl font-bold font-mono text-yellow-400">
-              <Icons.Coins size={16} className="text-yellow-400" />
-              {credits.toLocaleString()} ₡
+        {/* HOME TAB */}
+        {activeTab === 'home' && (
+          <div className="h-full flex flex-col justify-between p-4 pb-28 pointer-events-none">
+            
+            {/* Status Bars - Top Right */}
+            <div className="flex gap-3 justify-end pointer-events-auto">
+              <div className="glass-panel px-4 py-2.5 rounded-2xl border-l-4 border-blue-500/80 bg-black/70 backdrop-blur-xl shadow-lg animate-[slideUp_0.5s_ease-out]">
+                <span className="text-gray-400 text-[10px] uppercase block tracking-wider font-bold mb-0.5">CRÉDITOS</span>
+                <span className="text-xl font-bold font-mono text-blue-300 drop-shadow-[0_0_10px_rgba(147,197,253,0.5)]">{credits.toLocaleString()} ₡</span>
+              </div>
+              <div className="glass-panel px-4 py-2.5 rounded-2xl text-xs font-bold text-gray-300 border border-white/10 bg-black/70 backdrop-blur-xl shadow-lg font-orbitron flex items-center animate-[slideUp_0.5s_ease-out]">
+                MK-{droneLevel}
+              </div>
             </div>
-            <div className="mt-1 text-sm font-orbitron text-gray-400 leading-none">
-                CRÉDITOS
-            </div>
-          </div>
-          <div className="flex flex-col items-end bg-black/50 backdrop-blur-sm p-3 rounded-xl border border-white/10 shadow-lg">
-            <div className="text-lg font-bold font-orbitron text-blue-400 leading-none">
-              NIVEL DRON
-            </div>
-            <div className="text-3xl font-bold font-mono text-blue-400">
-              {droneLevel}
-            </div>
-          </div>
-        </div>
 
-        {/* Middle Content */}
-        <div className="flex-1 flex flex-col justify-center items-center">
-            {missionState === 'mining' && (
-                <div className="bg-black/80 backdrop-blur-md p-6 rounded-3xl border border-blue-500/50 shadow-2xl shadow-blue-500/30 text-center font-orbitron animate-pulse">
-                    <div className="text-4xl font-extrabold text-blue-400 mb-2">VIAJANDO</div>
-                    <div className="text-xl font-mono text-white tracking-widest">
-                        {timeLeft} / {totalDuration}s
+            {/* Mission Control Panel - Bottom Center */}
+            <div className="w-full max-w-md mx-auto glass-panel p-5 rounded-3xl border border-blue-500/30 pointer-events-auto shadow-2xl bg-black/80 backdrop-blur-xl animate-[slideUp_0.6s_ease-out]">
+              
+              {/* Header Area: Planet Info OR Buy Button */}
+              <div className="mb-4 text-center min-h-[60px] flex flex-col justify-center items-center">
+                {isPlanetUnlocked ? (
+                  <>
+                    <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
+                      {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
+                    </p>
+                    <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
+                      {currentPlanet.name}
+                    </h3>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">
+                      Multiplicador: {currentPlanet.rarityMultiplier.toFixed(1)}x
+                    </p>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => unlockPlanet(currentPlanet.id)}
+                    disabled={!canAffordPlanet}
+                    className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                        canAffordPlanet 
+                        ? 'bg-yellow-600 hover:bg-yellow-500 border-yellow-400 text-white animate-pulse'
+                        : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Icons.Lock size={14} />
+                    <div className="flex flex-col items-start leading-none">
+                        <span className="text-[10px]">COMPRAR {currentPlanet.name}</span>
+                        <span className="text-sm font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
                     </div>
-                </div>
-            )}
+                  </button>
+                )}
+              </div>
 
-            {missionState === 'reward' && (
-                <div className="bg-black/80 backdrop-blur-md p-6 rounded-3xl border border-green-500/50 shadow-2xl shadow-green-500/30 text-center font-orbitron">
-                    <div className="text-4xl font-extrabold text-green-400 mb-2">RECOMPENSA</div>
-                    <div className="text-xl font-mono text-white tracking-widest">
-                        Reclamando...
-                    </div>
-                </div>
-            )}
-        </div>
+              {/* Control Row: Arrows & Main Button */}
+              <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => changePlanet(-1)}
+                    disabled={missionState === 'mining'}
+                    className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
+                  >
+                    <Icons.ArrowLeft size={20} />
+                  </button>
 
-        {/* Bottom Panel: Tabs and Controls */}
-        <div className="flex-0 pointer-events-auto">
-          
-          {/* Main Content Area based on Tab */}
-          {activeTab === 'home' && (
-            <div className="bg-black/70 backdrop-blur-xl p-4 rounded-t-3xl border-t border-white/10 shadow-2xl max-w-md mx-auto">
-                <h2 className="text-center text-xl font-orbitron font-bold text-white mb-4 leading-none">
-                    DESTINO: <span className="text-purple-400">{currentPlanet.name}</span>
-                </h2>
-                
-                {/* Planet Status/Controls */}
-                <div className="flex items-center justify-between gap-3 mb-4">
-                    {/* Upgrade Button */}
-                    <button onClick={upgrade} disabled={!canUpgrade || isMining} className={`flex-1 py-3 px-2 rounded-xl border font-bold text-sm leading-tight font-orbitron transition-all ${
-                        canUpgrade && !isMining
-                            ? 'bg-blue-600 hover:bg-blue-500 border-b-4 border-blue-800 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/30'
-                            : 'bg-gray-700/50 border-gray-700 text-gray-400 cursor-not-allowed'
-                    }`}>
-                        MEJORAR DRON <br/> 
-                        <span className="font-mono text-xs block mt-1">
-                            {canUpgrade ? (droneLevel * 250).toLocaleString() + ' ₡' : 'MAX/SIN FONDOS'}
-                        </span>
-                    </button>
-
-                    {/* Unlock Planet Button */}
-                    {!isPlanetUnlocked && (
-                        <button onClick={() => buyPlanet(currentPlanet.id, currentPlanet.cost)} disabled={credits < currentPlanet.cost || isMining} className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-xl border font-bold text-sm leading-tight font-orbitron transition-all ${
-                            credits >= currentPlanet.cost && !isMining
-                                ? 'bg-purple-600 hover:bg-purple-500 border-b-4 border-purple-800 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/30'
-                                : 'bg-gray-700/50 border-gray-700 text-gray-500 cursor-not-allowed'
-                        }`} >
-                            <Icons.Lock size={14} />
-                            <div className="flex flex-col items-start leading-none">
-                                <span className="text-[10px]">COMPRAR {currentPlanet.name}</span>
-                                <span className="text-sm font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
-                            </div>
+                  <div className="flex-1">
+                    {missionState === 'idle' && (
+                        <button 
+                            onClick={startMission} 
+                            disabled={!isPlanetUnlocked}
+                            className={`w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base transition-all ${
+                                isPlanetUnlocked
+                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 text-white border-blue-800 active:border-b-0 active:translate-y-1 hover:shadow-blue-500/50'
+                                : 'bg-gray-800 text-gray-500 border-gray-900 cursor-not-allowed'
+                            }`}
+                        >
+                            {isPlanetUnlocked ? 'INICIAR MISIÓN' : 'BLOQUEADO'}
                         </button>
                     )}
-                </div>
 
-                {/* Control Row: Arrows & Main Button */}
-                <div className="flex items-center gap-3">
-                    <button onClick={() => changePlanet(-1)} disabled={missionState === 'mining'} className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`} >
-                        <Icons.ArrowLeft size={20} />
-                    </button>
-                    
-                    <div className="flex-1">
-                        {missionState === 'idle' && (
-                            <button 
-                                onClick={startMission} 
-                                disabled={!isPlanetUnlocked} 
-                                className={`w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base transition-all ${
-                                    isPlanetUnlocked 
-                                        ? 'bg-green-600 text-white border-green-800 hover:bg-green-500 hover:scale-[1.02] active:scale-[0.98] shadow-green-500/50' 
-                                        : 'bg-gray-700/50 text-gray-400 border-gray-800 cursor-not-allowed'
-                                }`}
-                            >
-                                INICIAR MISIÓN ({Math.max(5, 10 - Math.floor(droneLevel/5))}s)
-                            </button>
-                        )}
-                        {missionState === 'mining' && (
-                            <button 
-                                disabled 
-                                className="w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base bg-yellow-600/50 text-white border-yellow-800 cursor-not-allowed animate-pulse"
-                            >
-                                VIAJANDO...
-                            </button>
-                        )}
-                        {missionState === 'reward' && (
-                            <button 
-                                onClick={closeReward} 
-                                className="w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base bg-green-600 text-white border-green-800 hover:bg-green-500 hover:scale-[1.02] active:scale-[0.98] shadow-green-500/50"
-                            >
-                                RECLAMAR
-                            </button>
-                        )}
-                    </div>
-
-                    <button onClick={() => changePlanet(1)} disabled={missionState === 'mining'} className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`} >
-                        <Icons.ArrowRight size={20} />
-                    </button>
-                </div>
-            </div>
-          )}
-
-          {activeTab === 'inventory' && (
-            <div className="bg-black/70 backdrop-blur-xl p-4 rounded-t-3xl border-t border-white/10 shadow-2xl max-w-md mx-auto h-[250px] overflow-y-auto">
-                <h2 className="text-center text-xl font-orbitron font-bold text-white mb-4 leading-none">INVENTARIO</h2>
-                
-                {groupedInv.length === 0 && (
-                    <div className="text-center text-gray-500 mt-8 font-orbitron">Inventario vacío. ¡A minar!</div>
-                )}
-                
-                <div className="space-y-3">
-                    {groupedInv.map(item => (
-                        <div key={item.name} className={`flex items-center gap-3 bg-gray-800 p-3 rounded-xl border ${item.border} border-l-4`}>
-                            <div className={`text-2xl w-10 h-10 flex items-center justify-center rounded border border-white/5`}>{item.icon}</div>
-                            
-                            <div className="flex-1">
-                                <h3 className={`font-bold text-base leading-tight ${item.style}`}>{item.name}</h3>
-                                <span className="text-xs text-gray-400 font-mono">x{item.count}</span>
-                            </div>
-                            
-                            <div className="text-right">
-                                <div className="text-sm font-mono text-white tracking-tight">{item.total.toLocaleString()}₡</div>
-                                <div className="text-xs text-gray-500 mt-0.5">Valor total</div>
-                            </div>
-
-                            <button onClick={() => sellItem(item, true)} className="text-red-400 hover:text-red-300 transition-colors p-1 rounded-full hover:bg-gray-700/50">
-                                <Icons.Trash size={16} />
-                            </button>
+                    {missionState === 'mining' && (
+                        <div className="w-full bg-gray-900/80 h-14 rounded-2xl overflow-hidden relative border border-gray-700/50 shadow-inner backdrop-blur-sm">
+                        <div 
+                            className="h-full bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 animate-pulse transition-all duration-1000" 
+                            style={{ width: `${((1 - timeLeft/totalDuration)*100)}%` }} 
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-900 font-mono tracking-wider text-lg drop-shadow-lg">
+                            T-{timeLeft}s
+                        </span>
                         </div>
-                    ))}
-                </div>
-            </div>
-          )}
-          
-          {/* Nav Bar */}
-          <nav className="flex justify-around bg-gray-900/90 backdrop-blur-md border-t border-gray-700/50 py-2 max-w-lg mx-auto rounded-t-lg">
-            
-            {/* Nav: Nave (Shop) */}
-            <button onClick={() => setActiveTab('shop')} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='shop'?'text-blue-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`} disabled>
-              <Icons.Bolt className="w-6 h-6" />
-              <span className="text-[9px] font-bold tracking-widest font-orbitron">NAVE</span>
-            </button>
+                    )}
 
-            {/* Nav: Home (Main Button) */}
-            <div className="relative -top-8">
-              <button onClick={() => setActiveTab('home')} className={`w-20 h-20 rounded-full flex items-center justify-center border-[6px] border-black shadow-2xl transition-all duration-300 ${activeTab === 'home' ? 'bg-blue-600 scale-110 shadow-blue-500/50' : 'bg-gray-800 hover:bg-gray-700'}`}>
-                <Icons.Home className="w-8 h-8 text-white" />
-              </button>
-            </div>
+                    {missionState === 'ready' && (
+                        <button onClick={claim} className="w-full bg-gradient-to-r from-green-500 via-green-400 to-green-500 hover:from-green-400 hover:to-green-300 py-4 rounded-2xl font-bold text-gray-900 tracking-widest shadow-[0_0_25px_rgba(74,222,128,0.6)] animate-pulse active:scale-95 transition-all border-b-4 border-green-700 font-orbitron text-base">
+                        RECUPERAR CARGA
+                        </button>
+                    )}
+                  </div>
 
-            {/* Nav: Inventory */}
-            <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='inventory'?'text-yellow-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
-              <div className="relative">
-                <Icons.Bag className="w-6 h-6" />
-                {inventory.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full shadow-lg border border-gray-900"></span>}
+                  <button 
+                    onClick={() => changePlanet(1)}
+                    disabled={missionState === 'mining'}
+                    className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
+                  >
+                    <Icons.ArrowRight size={20} />
+                  </button>
               </div>
-              <span className="text-[9px] font-bold tracking-widest font-orbitron">INVENTARIO</span>
-            </button>
-          </nav>
-        </div>
-        
+
+            </div>
+          </div>
+        )}
+
+        {/* INVENTORY TAB */}
+        {activeTab === 'inventory' && (
+          <div className="h-full bg-black/90 backdrop-blur-xl p-4 pt-12 pb-32 overflow-y-auto pointer-events-auto animate-[slideUp_0.4s_ease-out]">
+            <div className="flex justify-between items-end mb-8 border-b border-white/10 pb-4">
+              <div>
+                <h2 className="text-3xl font-bold text-white font-orbitron tracking-wider">BODEGA</h2>
+                <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest">Capacidad: {inventory.length} items</p>
+              </div>
+              {inventory.length > 0 && (
+                <button onClick={sellEverything} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold px-4 py-2 rounded-lg border border-red-500/30 active:scale-95 transition-all flex items-center gap-2">
+                  <Icons.Trash size={14} className="inline"/> VENDER TODO
+                </button>
+              )}
+            </div>
+            
+            {groupedInv.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-600">
+                <div className="text-6xl mb-4 opacity-20">📦</div>
+                <p className="font-bold uppercase tracking-widest">Bodega Vacía</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {groupedInv.map(item => (
+                  <div key={item.name} className={`bg-gray-900/40 border-l-4 ${item.border} p-4 rounded-r-xl flex flex-col gap-3 relative overflow-hidden group`}>
+                    <div className="flex justify-between items-start relative z-10">
+                      <div className="flex gap-4 items-center">
+                        <div className="text-4xl bg-black/50 w-16 h-16 flex items-center justify-center rounded-xl border border-white/5 shadow-inner">{item.icon}</div>
+                        <div>
+                          <h3 className={`font-bold text-lg leading-tight ${item.style}`}>{item.name}</h3>
+                          <span className={`text-[10px] uppercase tracking-wider font-bold bg-white/5 px-2 py-0.5 rounded mt-1 inline-block text-gray-400`}>{item.rarity}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xl font-mono text-white font-bold tracking-tight">+{item.val.toLocaleString()}₡</div>
+                        <div className="text-xs text-gray-500 mt-1 font-mono">x{item.count}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2 mt-2">
+                        <button onClick={() => sellItem(item)} className="flex-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors"><Icons.Coins size={14} className="text-yellow-500"/> Vender 1</button>
+                        <button onClick={() => sellItem(item, true)} className="flex-1 bg-blue-500/10 hover:bg-blue-500/20 py-2 rounded-lg text-xs font-bold text-blue-300 flex items-center justify-center gap-2 border border-blue-500/20 transition-colors"><Icons.Trash size={14}/> Vender Todo</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SHOP TAB */}
+        {activeTab === 'shop' && (
+          <div className="h-full bg-black/90 backdrop-blur-xl p-6 pt-12 pb-32 pointer-events-auto animate-[slideUp_0.4s_ease-out] flex flex-col">
+            <h2 className="text-3xl font-bold text-white font-orbitron mb-2 text-center tracking-widest">INGENIERÍA</h2>
+            <p className="text-center text-gray-500 text-xs uppercase tracking-widest mb-8">Mejoras de Dron & Sistemas</p>
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="relative w-full max-w-xs aspect-square mb-8">
+                <div className="absolute inset-0 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+                <div className="w-full h-full bg-gray-900/50 rounded-full border border-blue-500/30 flex items-center justify-center relative z-10 shadow-[0_0_50px_rgba(59,130,246,0.15)]">
+                  <div className="text-8xl filter drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">🛸</div>
+                </div>
+              </div>
+              <div className="w-full max-w-sm bg-gray-900/80 rounded-2xl p-6 border border-white/10">
+                <div className="flex justify-between items-end mb-4">
+                  <div><h3 className="text-lg font-bold text-white font-orbitron">Interceptor MK-{droneLevel + 1}</h3><p className="text-xs text-blue-400 uppercase tracking-widest">Próxima Generación</p></div>
+                  <div className="text-right"><span className="block text-[10px] text-gray-500 uppercase">Costo</span><span className={`font-mono font-bold text-lg ${credits >= droneLevel*250 ? 'text-green-400' : 'text-red-400'}`}>{(droneLevel * 250).toLocaleString()} ₡</span></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-6"><div className="bg-black/40 p-3 rounded-lg border border-white/5 flex flex-col items-center"><span className="text-gray-500 text-[10px] uppercase font-bold mb-1">Velocidad</span><span className="text-green-400 font-bold text-xl">+5%</span></div><div className="bg-black/40 p-3 rounded-lg border border-white/5 flex flex-col items-center"><span className="text-gray-500 text-[10px] uppercase font-bold mb-1">Suerte</span><span className="text-yellow-400 font-bold text-xl">+2%</span></div></div>
+                <button onClick={upgrade} disabled={credits < droneLevel * 250} className={`w-full py-4 rounded-xl font-bold font-orbitron text-lg shadow-lg active:scale-95 transition-all ${credits >= droneLevel*250 ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'}`}>{credits >= droneLevel * 250 ? 'INSTALAR MEJORA' : 'CRÉDITOS INSUFICIENTES'}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* DOCK INFERIOR */}
+      <div className="absolute bottom-6 w-full px-6 z-50 pointer-events-auto">
+        <div className="bg-gray-900/80 backdrop-blur-2xl rounded-full p-2 flex justify-between items-center h-20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 relative">
+          <button onClick={() => setActiveTab('shop')} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='shop'?'text-blue-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
+            <Icons.Bolt className="w-6 h-6" />
+            <span className="text-[9px] font-bold tracking-widest font-orbitron">NAVE</span>
+          </button>
+          <div className="relative -top-8">
+            <button onClick={() => setActiveTab('home')} className={`w-20 h-20 rounded-full flex items-center justify-center border-[6px] border-black shadow-2xl transition-all duration-300 ${activeTab === 'home' ? 'bg-blue-600 scale-110 shadow-blue-500/50' : 'bg-gray-800 hover:bg-gray-700'}`}>
+              <Icons.Home className="w-8 h-8 text-white" />
+            </button>
+          </div>
+          <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='inventory'?'text-yellow-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
+            <div className="relative">
+              <Icons.Bag className="w-6 h-6" />
+              {inventory.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping border border-black"></span>}
+            </div>
+            <span className="text-[9px] font-bold tracking-widest font-orbitron">CARGA</span>
+          </button>
+        </div>
+      </div>
+
+      {/* MODAL */}
+      {reward && <RewardModal item={reward} onClose={() => setReward(null)} />}
     </div>
   );
 }
