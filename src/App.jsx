@@ -377,88 +377,126 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
         // -- ANIMACIÓN NAVE --
         if(shipRef.current) {
             let targetZ = 0;
+            let targetY = 0;
             let targetRotY = 0;
+            let targetRotZ = 0; // Rotación de "Verticalidad" (Morro arriba)
             let targetBank = 0;
 
             if (isMining) {
-                // Durante la misión, dejamos de girar "artísticamente" y volamos
+                // Durante la misión, ejecutamos el ciclo de vuelo y aterrizaje
+                
+                // Coordenadas de "Aterrizaje"
+                // Planeta en Z = -300, Radio 60. Superficie aprox en Z = -240.
+                const surfaceZ = -238; 
+                const hoverHeight = 10; // Altura de la superficie en Y
 
                 // FASE 1: IDA (0% - 40%) - Viajar hacia el planeta lejano
                 if(progress < 0.4) {
-                    targetZ = -200 * (progress / 0.4); 
-                    targetRotY = Math.PI / 2; // Rotado 90 grados en el eje Y
-                    targetBank = 0.2; // Inclinación ligera
+                    const phaseP = progress / 0.4;
+                    // Moverse de Z=0 a Z=-220 (Cerca del planeta)
+                    targetZ = -220 * phaseP;
+                    // Subir un poco para arco
+                    targetY = 20 * Math.sin(phaseP * Math.PI); 
+                    targetRotY = Math.PI / 2; // Volar recto
+                    targetBank = 0;
                 } 
-                // FASE 2: ÓRBITA (40% - 70%)
-                else if(progress < 0.7) {
-                    targetZ = -200;
-                    targetRotY = Math.PI / 2; // Rotado 90 grados en el eje Y
-                    // Flotación en órbita
-                    shipRef.current.position.y = Math.sin(time * 3) * 1.5;
+                // FASE 2: APROXIMACIÓN Y ATERRIZAJE VERTICAL (40% - 50%)
+                else if(progress < 0.5) {
+                    const phaseP = (progress - 0.4) / 0.1;
+                    targetZ = -220 + (surfaceZ - (-220)) * phaseP;
+                    targetY = 10; // Altura final
+                    targetRotY = Math.PI / 2; 
+                    // ROTACIÓN VERTICAL: Girar 90 grados en Z local para que el morro apunte arriba
+                    targetRotZ = (Math.PI / 2) * phaseP; 
                 }
-                // FASE 3: REGRESO (70% - 100%)
+                // FASE 3: MINADO EN SUPERFICIE (50% - 60%)
+                else if(progress < 0.6) {
+                    targetZ = surfaceZ;
+                    targetY = 10;
+                    targetRotY = Math.PI / 2;
+                    targetRotZ = Math.PI / 2; // Mantener vertical
+                    // Vibración
+                    shipRef.current.position.x = (Math.random()-0.5) * 0.2;
+                }
+                // FASE 4: DESPEGUE (60% - 70%)
+                else if(progress < 0.7) {
+                    const phaseP = (progress - 0.6) / 0.1;
+                    targetZ = surfaceZ + 20 * phaseP; // Alejarse un poco
+                    targetY = 10 + 20 * phaseP; // Subir
+                    targetRotY = Math.PI / 2;
+                    // Volver a horizontal
+                    targetRotZ = (Math.PI / 2) * (1 - phaseP);
+                }
+                // FASE 5: REGRESO (70% - 100%)
                 else {
                     const returnProgress = (progress - 0.7) / 0.3;
-                    targetZ = -200 * (1 - returnProgress); 
-                    targetRotY = Math.PI / 2 + Math.PI; // Rotado 90 grados + 180 grados = 270 grados para regresar
-                    targetBank = -0.2;
+                    // De -220 a 0
+                    targetZ = -220 * (1 - returnProgress);
+                    targetY = 20 * Math.sin((1-returnProgress) * Math.PI);
+                    targetRotY = Math.PI / 2 + Math.PI; // Vuelta completa para mirar a casa
+                    targetRotZ = 0;
                 }
+
+                // Interpolaciones directas para suavidad
+                shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, targetZ, 0.08);
+                shipRef.current.position.y = THREE.MathUtils.lerp(shipRef.current.position.y, targetY, 0.08);
                 
-                // Vibración de motor
-                shipRef.current.position.y += (Math.random()-0.5)*0.05;
-
-            } else {
-                // IDLE: Rotación continua de exhibición
-                targetZ = 0;
-                shipRef.current.rotation.y += 0.005; // ROTACIÓN CONTINUA
-                shipRef.current.position.y = Math.sin(time * 2) * 0.5; 
-                targetBank = 0;
-            }
-
-            // Aplicar posiciones interpoladas
-            shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, targetZ, 0.05);
-            
-            // Solo interpolamos rotación Y si estamos en misión (para las vueltas)
-            // Si estamos en idle, la rotación es continua (+=)
-            if (isMining) {
+                // Gestión de rotación Y (Evitar giros de 360 innecesarios)
                 let currentY = shipRef.current.rotation.y;
-                // Normalizar para evitar giros locos
                 if (Math.abs(targetRotY - currentY) > Math.PI) {
                      if (targetRotY > currentY) currentY += 2 * Math.PI;
                      else currentY -= 2 * Math.PI;
                 }
-                shipRef.current.rotation.y = THREE.MathUtils.lerp(currentY, targetRotY, 0.04);
-            }
+                shipRef.current.rotation.y = THREE.MathUtils.lerp(currentY, targetRotY, 0.05);
+                
+                // Rotación Z (Verticalidad)
+                shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, targetRotZ, 0.05);
 
-            shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, targetBank, 0.05);
-            
-            // Pitch (Cabeceo) al acelerar
-            const pitch = isMining ? -0.1 : 0;
-            shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, pitch, 0.05);
+                // Reset X
+                shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, 0, 0.1);
+
+            } else {
+                // IDLE: Rotación continua de exhibición en base
+                targetZ = 0;
+                shipRef.current.rotation.y += 0.005; // ROTACIÓN CONTINUA
+                shipRef.current.position.y = Math.sin(time * 2) * 0.5; 
+                shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, 0, 0.05);
+                shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, 0, 0.05);
+                shipRef.current.rotation.x = 0;
+            }
         }
 
-        // -- CÁMARA --
-        if (cameraRef.current && shipRef.current) {
+        // -- CÁMARA (LÓGICA ACTUALIZADA) --
+        if (cameraRef.current) {
             if (isMining) {
-                // Cámara de seguimiento
-                const idealZ = shipRef.current.position.z + 15; 
-                const idealY = 4;
-                cameraRef.current.position.z = THREE.MathUtils.lerp(cameraRef.current.position.z, idealZ, 0.05);
-                cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, idealY, 0.05);
+                // CÁMARA FIJA DE MISIÓN:
+                // Se coloca a un lado y atrás para ver todo el recorrido (Z=0 a Z=-300)
+                // Posición: X=40 (Lado), Y=20 (Arriba), Z=20 (Atrás del inicio)
+                const fixedPos = new THREE.Vector3(40, 20, 20);
+                cameraRef.current.position.lerp(fixedPos, 0.05);
+                
+                // Mirar hacia un punto medio del trayecto para encuadrar planeta y nave
+                const lookAtTarget = new THREE.Vector3(0, 0, -100);
+                cameraRef.current.lookAt(lookAtTarget);
             } else {
                 // Cámara de exhibición (Idle)
                 cameraRef.current.position.z = THREE.MathUtils.lerp(cameraRef.current.position.z, 12, 0.05);
                 cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, 3, 0.05);
+                cameraRef.current.position.x = THREE.MathUtils.lerp(cameraRef.current.position.x, 0, 0.05);
+                if(shipRef.current) {
+                    cameraRef.current.lookAt(shipRef.current.position.x, 0, shipRef.current.position.z - 10);
+                }
             }
-            cameraRef.current.lookAt(shipRef.current.position.x, 0, shipRef.current.position.z - 10);
         }
 
         // -- PLANETA --
         if(planetRef.current) planetRef.current.rotation.y += 0.0005;
 
-        // -- ESTRELLAS (Efecto velocidad) --
+        // -- ESTRELLAS (Efecto velocidad solo si no estamos aterrizados) --
         if(starsRef.current) {
-            const speed = isMining ? 3 : 0.1;
+            // Detener estrellas si estamos en el suelo (40% - 70%)
+            const landed = (progress > 0.4 && progress < 0.7);
+            const speed = (isMining && !landed) ? 2 : 0.1;
             const pos = starsRef.current.geometry.attributes.position.array;
             for(let i=0; i<3000; i++) {
                 pos[i*3] -= speed;
@@ -467,12 +505,13 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
             starsRef.current.geometry.attributes.position.needsUpdate = true;
         }
 
-        // -- PARTÍCULAS (FUEGO MEJORADO) --
+        // -- PARTÍCULAS (FUEGO) --
         const pList = particles.current;
-        // Más partículas y más grandes si está minando
-        const spawnRate = isMining ? 0.8 : 0.3;
+        // Si está aterrizado (vertical), apagar motor principal visualmente o reducir mucho
+        const landed = (progress > 0.45 && progress < 0.65);
+        const spawnRate = (isMining && !landed) ? 0.8 : (landed ? 0.1 : 0.3);
         const fireScale = isMining ? 2.0 : 0.8;
-        const fireColor = isMining ? 0x00ffff : 0xff5500; // Azul (Turbo) vs Naranja (Idle)
+        const fireColor = isMining ? 0x00ffff : 0xff5500;
         
         // Spawnear nuevas
         if(Math.random() < spawnRate) {
@@ -486,14 +525,15 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
                 offset.applyEuler(shipRef.current.rotation);
                 p.mesh.position.copy(shipRef.current.position).add(offset);
                 
-                // Velocidad hacia atrás
+                // Velocidad relativa a la rotación de la nave
+                // Si la nave está vertical, el fuego debe ir hacia abajo (Y-)
                 const speed = isMining ? 0.8 : 0.2;
                 const vel = new THREE.Vector3(-speed - Math.random()*0.2, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1);
                 vel.applyEuler(shipRef.current.rotation);
                 p.velocity.copy(vel);
 
                 p.mesh.material.color.setHex(fireColor);
-                p.mesh.material.opacity = 1; // Reset opacity
+                p.mesh.material.opacity = 1; 
             }
         }
         
@@ -510,7 +550,8 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
 
         // Luz Motor
         if (engineLightRef.current) {
-            const intensity = isMining ? 8 : 2 + Math.sin(time * 5);
+            // Apagar luz si está aterrizado
+            const intensity = landed ? 0.5 : (isMining ? 8 : 2 + Math.sin(time * 5));
             engineLightRef.current.intensity = THREE.MathUtils.lerp(engineLightRef.current.intensity, intensity, 0.1);
             engineLightRef.current.color.setHex(fireColor);
         }
