@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+// Importador de GLTF/GLB
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // --- ICONOS SVG ---
 const Icons = {
@@ -226,79 +228,123 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
     rimLight.position.set(-5, 5, -5);
     scene.add(rimLight);
 
-    // 4. NAVE (Estilo Toon Morado)
-    const shipGroup = new THREE.Group();
-    // Materiales
-    const purpleMat = new THREE.MeshToonMaterial({ color: 0x8A2BE2 });
-    const blackMat = new THREE.MeshToonMaterial({ color: 0x111111 });
-    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88ccff, roughness: 0.2, metalness: 0.9, transmission: 0.9, transparent: true });
-    const silverMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.8, roughness: 0.3 });
+    // 4. NAVE (Lógica Dual: GLB o Procedural)
+    const shipContainer = new THREE.Group();
+    scene.add(shipContainer);
+    shipRef.current = shipContainer; // Referencia principal para animar
 
-    // Cuerpo (Esfera alargada)
-    const bodyGeo = new THREE.SphereGeometry(1, 32, 32);
-    const body = new THREE.Mesh(bodyGeo, purpleMat);
-    body.scale.set(1.8, 1, 1);
-    shipGroup.add(body);
+    // Función: Crear Nave Procedural (Fallback)
+    const createProceduralShip = () => {
+        const shipGroup = new THREE.Group();
+        // Materiales
+        const purpleMat = new THREE.MeshToonMaterial({ color: 0x8A2BE2 });
+        const blackMat = new THREE.MeshToonMaterial({ color: 0x111111 });
+        const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88ccff, roughness: 0.2, metalness: 0.9, transmission: 0.9, transparent: true });
+        const silverMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.8, roughness: 0.3 });
 
-    // Bandas Negras (Toroides)
-    const band1 = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.06, 16, 64), blackMat);
-    band1.rotation.y = Math.PI/2;
-    shipGroup.add(band1);
+        // Cuerpo (Esfera alargada)
+        const bodyGeo = new THREE.SphereGeometry(1, 32, 32);
+        const body = new THREE.Mesh(bodyGeo, purpleMat);
+        body.scale.set(1.8, 1, 1);
+        shipGroup.add(body);
+
+        // Bandas Negras (Toroides)
+        const band1 = new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.06, 16, 64), blackMat);
+        band1.rotation.y = Math.PI/2;
+        shipGroup.add(band1);
+        
+        const band2 = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.06, 16, 64), blackMat);
+        band2.rotation.y = Math.PI/2;
+        band2.position.x = 0.8;
+        shipGroup.add(band2);
+        
+        const band3 = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.06, 16, 64), blackMat);
+        band3.rotation.y = Math.PI/2;
+        band3.position.x = -0.8;
+        shipGroup.add(band3);
+        
+        const band4 = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 16, 64), blackMat);
+        band4.rotation.x = Math.PI/2;
+        band4.scale.set(1.8, 1, 1);
+        shipGroup.add(band4);
+
+        // Cabina
+        const winLeft = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.4, 4, 8), glassMat);
+        winLeft.rotation.z = Math.PI/2;
+        winLeft.rotation.x = Math.PI/6;
+        winLeft.position.set(1.0, 0.4, 0.25);
+        shipGroup.add(winLeft);
+        const winRight = winLeft.clone();
+        winRight.position.set(1.0, 0.4, -0.25);
+        shipGroup.add(winRight);
+
+        // Aleta Superior
+        const finShape = new THREE.Shape();
+        finShape.moveTo(0,0); finShape.quadraticCurveTo(0.5, 0.5, 0.5, 1.0); finShape.lineTo(-0.8, 0.8); finShape.quadraticCurveTo(-0.5, 0.4, -0.8, 0);
+        const fin = new THREE.Mesh(new THREE.ExtrudeGeometry(finShape, { depth: 0.1, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05 }), purpleMat);
+        fin.position.set(-0.5, 0.85, -0.05); shipGroup.add(fin);
+
+        // Alas Laterales
+        const wingGeo = new THREE.BoxGeometry(1.0, 0.1, 0.8);
+        const wingL = new THREE.Mesh(wingGeo, purpleMat);
+        wingL.position.set(-0.5, -0.5, 0.8); wingL.rotation.set(0.5, 0, 0.2); shipGroup.add(wingL);
+        const wingR = new THREE.Mesh(wingGeo, purpleMat);
+        wingR.position.set(-0.5, -0.5, -0.8); wingR.rotation.set(-0.5, 0, 0.2); shipGroup.add(wingR);
+
+        // Motor
+        const engine = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.6, 32), silverMat);
+        engine.rotation.z = Math.PI/2;
+        engine.position.set(-1.8, 0, 0);
+        shipGroup.add(engine);
+
+        // Ajuste de rotación inicial para que mire hacia +X (estándar del contenedor)
+        // La nave procedural se construyó mirando a X+, así que está bien.
+        // Solo necesitamos rotarla si el contenedor espera otra cosa, pero en el anim loop rotamos shipRef.current.
+        // shipGroup está dentro de shipRef.current.
+        
+        return shipGroup;
+    };
+
+    // Intentar cargar GLB, si falla usar Procedural
+    const loader = new GLTFLoader();
+    loader.load(
+        '/nave.glb',
+        (gltf) => {
+            // ÉXITO: Usar modelo cargado
+            const loadedShip = gltf.scene;
+            // Ajustar escala y rotación si es necesario para coincidir con la lógica
+            // Asumimos que la nave en el GLB mira hacia algun lado. 
+            // Normalmente en Threejs "adelante" es -Z, pero nuestra lógica anima asumiendo X o Z.
+            // Para simplificar, rotamos el modelo cargado para que "mire" hacia +X que es donde ponemos el fuego del motor (-X es atras).
+            // Esto depende de cómo fue exportado el GLB. Ajuste genérico:
+            loadedShip.rotation.y = Math.PI; // A veces vienen mirando al revés
+            loadedShip.scale.set(0.5, 0.5, 0.5); // Escala preventiva
+            
+            shipContainer.clear(); // Limpiar contenedor por si habia algo
+            shipContainer.add(loadedShip);
+        },
+        undefined, // Progress
+        (error) => {
+            // ERROR: Usar nave procedural
+            console.log("No se encontró nave.glb, usando nave por defecto.");
+            const defaultShip = createProceduralShip();
+            shipContainer.clear();
+            shipContainer.add(defaultShip);
+        }
+    );
+
+    // Inicialmente (antes de que cargue o falle) ponemos la procedural para que no se vea vacío
+    const initialShip = createProceduralShip();
+    shipContainer.add(initialShip);
     
-    const band2 = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.06, 16, 64), blackMat);
-    band2.rotation.y = Math.PI/2;
-    band2.position.x = 0.8;
-    shipGroup.add(band2);
-    
-    const band3 = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.06, 16, 64), blackMat);
-    band3.rotation.y = Math.PI/2;
-    band3.position.x = -0.8;
-    shipGroup.add(band3);
-    
-    const band4 = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 16, 64), blackMat);
-    band4.rotation.x = Math.PI/2;
-    band4.scale.set(1.8, 1, 1);
-    shipGroup.add(band4);
+    // Rotación inicial del contenedor general (igual que antes)
+    shipContainer.rotation.y = Math.PI / 2;
 
-    // Cabina
-    const winLeft = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.4, 4, 8), glassMat);
-    winLeft.rotation.z = Math.PI/2;
-    winLeft.rotation.x = Math.PI/6;
-    winLeft.position.set(1.0, 0.4, 0.25);
-    shipGroup.add(winLeft);
-    const winRight = winLeft.clone();
-    winRight.position.set(1.0, 0.4, -0.25);
-    shipGroup.add(winRight);
 
-    // Aleta Superior
-    const finShape = new THREE.Shape();
-    finShape.moveTo(0,0); finShape.quadraticCurveTo(0.5, 0.5, 0.5, 1.0); finShape.lineTo(-0.8, 0.8); finShape.quadraticCurveTo(-0.5, 0.4, -0.8, 0);
-    const fin = new THREE.Mesh(new THREE.ExtrudeGeometry(finShape, { depth: 0.1, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05 }), purpleMat);
-    fin.position.set(-0.5, 0.85, -0.05); shipGroup.add(fin);
-
-    // Alas Laterales
-    const wingGeo = new THREE.BoxGeometry(1.0, 0.1, 0.8);
-    const wingL = new THREE.Mesh(wingGeo, purpleMat);
-    wingL.position.set(-0.5, -0.5, 0.8); wingL.rotation.set(0.5, 0, 0.2); shipGroup.add(wingL);
-    const wingR = new THREE.Mesh(wingGeo, purpleMat);
-    wingR.position.set(-0.5, -0.5, -0.8); wingR.rotation.set(-0.5, 0, 0.2); shipGroup.add(wingR);
-
-    // Motor
-    const engine = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.6, 32), silverMat);
-    engine.rotation.z = Math.PI/2;
-    engine.position.set(-1.8, 0, 0);
-    shipGroup.add(engine);
-
-    // Luz Motor (PointLight)
+    // Luz Motor (PointLight) - Se agrega a la escena, pero se mueve con la nave en el loop
     const engLight = new THREE.PointLight(0xffaa00, 0, 10);
     engLight.position.set(-2.5, 0, 0); scene.add(engLight);
     engineLightRef.current = engLight;
-
-    // Rotación inicial de 90 grados en el eje Y
-    shipGroup.rotation.y = Math.PI / 2;
-
-    scene.add(shipGroup);
-    shipRef.current = shipGroup;
 
     // 5. PLANETA LEJANO
     const planetGroup = new THREE.Group();
@@ -521,6 +567,8 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
                 p.mesh.visible = true;
                 
                 // Nacer en el motor (-1.8 en X local)
+                // OJO: Si cargamos un GLB, hay que ver donde esta el motor. 
+                // Asumimos que esta en -X (hacia atras).
                 const offset = new THREE.Vector3(-1.8, 0, 0); 
                 offset.applyEuler(shipRef.current.rotation);
                 p.mesh.position.copy(shipRef.current.position).add(offset);
