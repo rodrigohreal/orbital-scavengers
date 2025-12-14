@@ -185,14 +185,6 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
   };
 
   useEffect(() => {
-
-    const lerpAngle = (a, b, t) => {
-      const TWO_PI = Math.PI * 2;
-      let diff = b - a;
-      diff = ((diff + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
-      return a + diff * t;
-    };
-
     // 1. SETUP
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x050510, 0.005); 
@@ -331,16 +323,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
 
     // 6. ESTRELLAS
     const stars = new THREE.Points(
-        new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute((() => {
-      const count = 5000;
-      const arr = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        arr[i*3] = (Math.random()-0.5)*1000;
-        arr[i*3+1] = (Math.random()-0.5)*1000;
-        arr[i*3+2] = (Math.random()-0.5)*1000;
-      }
-      return arr;
-    })() => (Math.random()-0.5)*1000), 3)),
+        new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(5000 * 3).map(() => (Math.random()-0.5)*1000), 3)),
         new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, transparent: true, opacity: 0.8 })
     );
     scene.add(stars);
@@ -532,14 +515,6 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
   }, [level, planet]);
 
   useEffect(() => {
-
-    const lerpAngle = (a, b, t) => {
-      const TWO_PI = Math.PI * 2;
-      let diff = b - a;
-      diff = ((diff + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
-      return a + diff * t;
-    };
-
     window.missionActive = (missionState === 'mining');
     window.totalTime = totalDuration;
     window.currentTime = timeLeft;
@@ -590,14 +565,6 @@ export default function App() {
   });
 
   useEffect(() => {
-
-    const lerpAngle = (a, b, t) => {
-      const TWO_PI = Math.PI * 2;
-      let diff = b - a;
-      diff = ((diff + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
-      return a + diff * t;
-    };
-
     localStorage.setItem('os_ultra_credits', credits);
     localStorage.setItem('os_ultra_level', droneLevel);
     localStorage.setItem('os_ultra_inv', JSON.stringify(inventory));
@@ -606,14 +573,6 @@ export default function App() {
   }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets]);
 
   useEffect(() => {
-
-    const lerpAngle = (a, b, t) => {
-      const TWO_PI = Math.PI * 2;
-      let diff = b - a;
-      diff = ((diff + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
-      return a + diff * t;
-    };
-
     let interval;
     if (missionState === 'mining' && timeLeft > 0) {
       interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
