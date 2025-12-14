@@ -37,6 +37,12 @@ const Icons = {
       <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
     </svg>
   ),
+  Lock: ({ size = 16, className }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  ),
 };
 
 // --- BASE DE DATOS ---
@@ -72,8 +78,77 @@ const ITEMS_DB = [
   { name: "Fragmento del Big Bang", val: 250000, rarity: "Mítico", style: "text-rose-500", border: "border-rose-600", icon: "💥", chance: 0.0005 }
 ];
 
+// --- CONFIGURACIÓN DE PLANETAS ---
+const PLANETS = [
+  { 
+    id: 0, 
+    name: "Sistema Solar", 
+    cost: 0, 
+    rarityMultiplier: 1.0,
+    style: {
+      planetColor1: "#1e3c72",
+      planetColor2: "#2a5298",
+      atmosphereColor: 0x4488ff,
+      ringColor: 0x88ccff,
+      hasRings: true
+    }
+  },
+  { 
+    id: 1, 
+    name: "Nebulosa Roja", 
+    cost: 10000, 
+    rarityMultiplier: 1.5,
+    style: {
+      planetColor1: "#7a1f1f",
+      planetColor2: "#a83232",
+      atmosphereColor: 0xff4444,
+      ringColor: 0xff6666,
+      hasRings: false
+    }
+  },
+  { 
+    id: 2, 
+    name: "Cúmulo Estelar", 
+    cost: 30000, 
+    rarityMultiplier: 2.0,
+    style: {
+      planetColor1: "#4a1e7a",
+      planetColor2: "#6b2d9f",
+      atmosphereColor: 0xaa44ff,
+      ringColor: 0xcc66ff,
+      hasRings: true
+    }
+  },
+  { 
+    id: 3, 
+    name: "Galaxia Remota", 
+    cost: 50000, 
+    rarityMultiplier: 2.5,
+    style: {
+      planetColor1: "#1e4a3c",
+      planetColor2: "#2d6b5a",
+      atmosphereColor: 0x44ff88,
+      ringColor: 0x66ffaa,
+      hasRings: true
+    }
+  },
+  { 
+    id: 4, 
+    name: "Agujero Negro", 
+    cost: 100000, 
+    rarityMultiplier: 3.5,
+    style: {
+      planetColor1: "#0a0a0a",
+      planetColor2: "#1a1a1a",
+      atmosphereColor: 0x4400ff,
+      ringColor: 0x6600ff,
+      hasRings: true
+    }
+  }
+];
+
 // --- ESCENA 3D ---
-const Scene3D = ({ missionState, level, totalDuration, timeLeft }) => {
+const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
   const mountRef = useRef(null);
   const shipRef = useRef(null);
   const planetRef = useRef(null);
@@ -217,22 +292,26 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft }) => {
 
     // 5. PLANETA LEJANO
     const planetGroup = new THREE.Group();
-    const pTex = createNoiseTexture("#1e3c72", "#2a5298");
+    const planetId = planet?.id ?? 0;
+    const planetData = PLANETS[planetId] || PLANETS[0];
+    const pTex = createNoiseTexture(planetData.style.planetColor1, planetData.style.planetColor2);
     const planetMat = new THREE.MeshStandardMaterial({ map: pTex, roughness: 0.8 });
-    const planet = new THREE.Mesh(new THREE.SphereGeometry(60, 64, 64), planetMat);
-    planetGroup.add(planet);
+    const planetMesh = new THREE.Mesh(new THREE.SphereGeometry(60, 64, 64), planetMat);
+    planetGroup.add(planetMesh);
     
     // Atmósfera
-    const atmoMat = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, side: THREE.BackSide });
+    const atmoMat = new THREE.MeshBasicMaterial({ color: planetData.style.atmosphereColor, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, side: THREE.BackSide });
     const atmo = new THREE.Mesh(new THREE.SphereGeometry(64, 64, 64), atmoMat);
     planetGroup.add(atmo);
 
-    // Anillos
-    const ringGeo = new THREE.RingGeometry(80, 110, 64);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x88ccff, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
-    const rings = new THREE.Mesh(ringGeo, ringMat);
-    rings.rotation.x = Math.PI / 2.5;
-    planetGroup.add(rings);
+    // Anillos (solo si el planeta los tiene)
+    if (planetData.style.hasRings) {
+      const ringGeo = new THREE.RingGeometry(80, 110, 64);
+      const ringMat = new THREE.MeshBasicMaterial({ color: planetData.style.ringColor, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+      const rings = new THREE.Mesh(ringGeo, ringMat);
+      rings.rotation.x = Math.PI / 2.5;
+      planetGroup.add(rings);
+    }
 
     // Posición: Lejos en el eje Z negativo
     planetGroup.position.set(0, 10, -300);
@@ -445,7 +524,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft }) => {
         if(mountRef.current) mountRef.current.innerHTML = '';
         renderer.dispose();
     };
-  }, [level]);
+  }, [level, planet]);
 
   // Sync Vars
   useEffect(() => {
@@ -491,12 +570,22 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
   const [reward, setReward] = useState(null);
+  const [selectedPlanet, setSelectedPlanet] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_planet');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [unlockedPlanets, setUnlockedPlanets] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_unlocked_planets');
+    return saved ? JSON.parse(saved) : [0]; // Planet 0 (Sistema Solar) is always unlocked
+  });
 
   useEffect(() => {
     localStorage.setItem('os_ultra_credits', credits);
     localStorage.setItem('os_ultra_level', droneLevel);
     localStorage.setItem('os_ultra_inv', JSON.stringify(inventory));
-  }, [credits, droneLevel, inventory]);
+    localStorage.setItem('os_ultra_planet', selectedPlanet);
+    localStorage.setItem('os_ultra_unlocked_planets', JSON.stringify(unlockedPlanets));
+  }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets]);
 
   useEffect(() => {
     let interval;
@@ -520,13 +609,32 @@ export default function App() {
     const roll = Math.random();
     let item = ITEMS_DB[0];
     const levelFactor = droneLevel * 0.1;
+    const currentPlanet = PLANETS[selectedPlanet];
+    const planetMultiplier = currentPlanet?.rarityMultiplier || 1.0;
+    
     const adjustedItems = ITEMS_DB.map(i => {
       let weight = i.chance;
-      if(i.rarity === "Común") weight /= (1 + levelFactor);
-      if(i.rarity === "Poco Común") weight *= (1 + levelFactor * 0.3);
-      if(i.rarity === "Raro" || i.rarity === "Épico") weight *= (1 + levelFactor * 0.5);
-      if(i.rarity === "Legendario") weight *= (1 + levelFactor);
-      if(i.rarity === "Mítico") weight *= (1 + levelFactor * 1.5);
+      // Apply planet multiplier (more expensive planets = higher rare item chances)
+      if(i.rarity === "Común") {
+        weight /= (1 + levelFactor);
+        weight /= planetMultiplier; // Reduce common items on better planets
+      }
+      if(i.rarity === "Poco Común") {
+        weight *= (1 + levelFactor * 0.3);
+        weight *= planetMultiplier * 0.5; // Slight boost
+      }
+      if(i.rarity === "Raro" || i.rarity === "Épico") {
+        weight *= (1 + levelFactor * 0.5);
+        weight *= planetMultiplier; // Good boost
+      }
+      if(i.rarity === "Legendario") {
+        weight *= (1 + levelFactor);
+        weight *= planetMultiplier * 1.5; // Strong boost
+      }
+      if(i.rarity === "Mítico") {
+        weight *= (1 + levelFactor * 1.5);
+        weight *= planetMultiplier * 2.0; // Very strong boost
+      }
       return { ...i, weight };
     });
     let totalWeight = adjustedItems.reduce((sum, i) => sum + i.weight, 0);
@@ -539,6 +647,16 @@ export default function App() {
     setInventory(prev => [...prev, newItem]);
     setReward(newItem);
     setMissionState('idle');
+  };
+
+  const unlockPlanet = (planetId) => {
+    const planet = PLANETS[planetId];
+    if (!planet || unlockedPlanets.includes(planetId)) return;
+    if (credits >= planet.cost) {
+      setCredits(prev => prev - planet.cost);
+      setUnlockedPlanets(prev => [...prev, planetId]);
+      setSelectedPlanet(planetId);
+    }
   };
 
   const sellEverything = () => {
@@ -584,9 +702,11 @@ export default function App() {
     return Object.values(map).sort((a,b) => b.val - a.val);
   }, [inventory]);
 
+  const currentPlanet = PLANETS[selectedPlanet];
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black text-white font-rajdhani select-none">
-      <Scene3D missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} />
+      <Scene3D missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
       
       {/* UI LAYER */}
       <div className="absolute inset-0 flex flex-col justify-between z-10 pointer-events-none">
@@ -606,11 +726,72 @@ export default function App() {
               </div>
             </div>
 
+            {/* Planet Selection - Above Mission Panel */}
+            <div className="w-full max-w-md mx-auto mb-3 pointer-events-auto">
+              <div className="glass-panel p-4 rounded-2xl border border-purple-500/30 bg-black/80 backdrop-blur-xl shadow-xl">
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-3 text-center">SELECCIONAR PLANETA</p>
+                <div className="space-y-2">
+                  {PLANETS.map((planet) => {
+                    const isUnlocked = unlockedPlanets.includes(planet.id);
+                    const isSelected = selectedPlanet === planet.id;
+                    const canAfford = credits >= planet.cost;
+                    return (
+                      <div key={planet.id} className="flex gap-2 items-center">
+                        <button
+                          onClick={() => {
+                            if (isUnlocked) {
+                              setSelectedPlanet(planet.id);
+                            }
+                          }}
+                          disabled={missionState === 'mining' || !isUnlocked}
+                          className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all text-left ${
+                            isSelected
+                              ? 'bg-purple-600 text-white border-2 border-purple-400'
+                              : isUnlocked
+                              ? 'bg-gray-800/50 text-gray-300 border border-gray-700 hover:bg-gray-700/50'
+                              : 'bg-gray-900/50 text-gray-600 border border-gray-800 cursor-default'
+                          } ${missionState === 'mining' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>{planet.name}</span>
+                            {isSelected && <span className="text-[9px]">✓</span>}
+                          </div>
+                          {isUnlocked && (
+                            <div className="text-[9px] text-gray-500 mt-0.5">
+                              Multiplicador: {planet.rarityMultiplier.toFixed(1)}x
+                            </div>
+                          )}
+                        </button>
+                        {!isUnlocked && (
+                          <button
+                            onClick={() => unlockPlanet(planet.id)}
+                            disabled={missionState === 'mining' || !canAfford}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                              canAfford
+                                ? 'bg-yellow-600 hover:bg-yellow-500 text-white border border-yellow-400'
+                                : 'bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed'
+                            } ${missionState === 'mining' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <Icons.Lock size={12} />
+                            <span>Comprar Planeta</span>
+                            <span className="text-[9px] ml-1">({planet.cost.toLocaleString()} ₡)</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {/* Mission Control Panel - Bottom Center */}
             <div className="w-full max-w-md mx-auto glass-panel p-5 rounded-3xl border border-blue-500/30 pointer-events-auto shadow-2xl bg-black/80 backdrop-blur-xl animate-[slideUp_0.6s_ease-out]">
               <div className="mb-4 text-center">
                 <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
                   {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
+                  {currentPlanet?.name} • Multiplicador: {currentPlanet?.rarityMultiplier.toFixed(1)}x
                 </p>
               </div>
 
