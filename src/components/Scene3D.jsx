@@ -9,13 +9,42 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { PLANETS } from '../data/planets';
 
+// Smooth easing functions for buttery animations
+const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
+const easeInOutQuad = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const smoothStep = (t) => t * t * (3 - 2 * t);
+
+// Smooth damping function (frame-rate independent)
+const damp = (current, target, smoothing, dt) => {
+  return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-smoothing * dt));
+};
+
 const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
   const mountRef = useRef(null);
   const shipRef = useRef(null);
   const planetRef = useRef(null);
   const starsRef = useRef(null);
+  const warpRef = useRef(null);
+  const shootingStarsRef = useRef([]);
   const engineLightRef = useRef(null);
   const cameraRef = useRef(null);
+  const clockRef = useRef(null);
+  
+  // Smooth animation state
+  const animState = useRef({
+    shipPos: new THREE.Vector3(0, 0, 0),
+    shipRot: new THREE.Euler(0, Math.PI / 2, 0),
+    shipVelocity: new THREE.Vector3(0, 0, 0),
+    cameraPos: new THREE.Vector3(0, 3, 12),
+    cameraTarget: new THREE.Vector3(0, 0, 0),
+    engineIntensity: 0,
+    prevProgress: 0,
+    // For smooth time tracking (independent of 1-second timer steps)
+    missionStartTime: 0,
+    isMissionActive: false,
+    smoothProgress: 0
+  });
   
   // Variables para suavizar animaciones
   const particles = useRef([]);
@@ -245,235 +274,615 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
     scene.add(planetGroup);
     planetRef.current = planetGroup;
 
-    // 6. ESTRELLAS (Fondo)
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = 3000;
-    const starPos = new Float32Array(starCount * 3);
-    for(let i=0; i<starCount*3; i++) starPos[i] = (Math.random()-0.5) * 1000;
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 1.0 });
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
-    starsRef.current = stars;
+    // 6. ESTRELLAS (Parallax Background)
+    const starGroup = new THREE.Group();
+    const createStarLayer = (count, size, speedFactor, color = 0xffffff) => {
+        const geo = new THREE.BufferGeometry();
+        const pos = new Float32Array(count * 3);
+        for(let i=0; i<count*3; i++) {
+            pos[i] = (Math.random()-0.5) * 1500;
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.8, sizeAttenuation: true });
+        const mesh = new THREE.Points(geo, mat);
+        mesh.userData = { speedFactor };
+        return mesh;
+    };
+    
+    // Create 3 layers for parallax
+    const starsFar = createStarLayer(2000, 0.6, 0.2); // Slow, far
+    const starsMid = createStarLayer(1500, 1.0, 0.5); // Medium
+    const starsNear = createStarLayer(500, 2.0, 1.0); // Fast, near (fewer)
+    
+    starGroup.add(starsFar, starsMid, starsNear);
+    scene.add(starGroup);
+    starsRef.current = starGroup;
 
-    // 7. PARTICULAS (Fuego Motor)
-    // Usamos AdditiveBlending para que se vean brillantes y no se oculten
-    const pGeo = new THREE.SphereGeometry(0.2, 4, 4);
-    const pMat = new THREE.MeshBasicMaterial({ 
-        color: 0xffaa00, 
+    // 6.1 WARP EFFECT (Lines)
+    const warpGroup = new THREE.Group();
+    const warpCount = 200;
+    const warpGeo = new THREE.BufferGeometry();
+    const warpPos = new Float32Array(warpCount * 6); // 2 points per line
+    
+    for(let i=0; i<warpCount; i++) {
+        let x = (Math.random() - 0.5) * 500;
+        let y = (Math.random() - 0.5) * 500;
+        // Keep center clear
+        if(Math.abs(x) < 50 && Math.abs(y) < 50) {
+             x += (x > 0 ? 50 : -50);
+             y += (y > 0 ? 50 : -50);
+        }
+        const z = (Math.random() - 0.5) * 1000;
+        const len = 100 + Math.random() * 200;
+        
+        // Start point
+        warpPos[i*6] = x; warpPos[i*6+1] = y; warpPos[i*6+2] = z;
+        // End point
+        warpPos[i*6+3] = x; warpPos[i*6+4] = y; warpPos[i*6+5] = z + len;
+    }
+    
+    warpGeo.setAttribute('position', new THREE.BufferAttribute(warpPos, 3));
+    const warpMat = new THREE.LineBasicMaterial({ 
+        color: 0x88ccff, 
         transparent: true, 
-        opacity: 0.8,
+        opacity: 0.0,
+        blending: THREE.AdditiveBlending 
+    });
+    const warpLines = new THREE.LineSegments(warpGeo, warpMat);
+    warpGroup.add(warpLines);
+    // Add a "tunnel" mesh for extra warp feeling
+    const tunnelGeo = new THREE.CylinderGeometry(40, 40, 1000, 16, 1, true);
+    const tunnelMat = new THREE.MeshBasicMaterial({ 
+        color: 0x4400ff, 
+        transparent: true, 
+        opacity: 0, 
+        side: THREE.BackSide,
         blending: THREE.AdditiveBlending,
-        depthWrite: false // CRUCIAL para que no se oculten entre sí o con el fondo incorrectamente
+        wireframe: true 
+    });
+    const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
+    tunnel.rotation.x = Math.PI / 2;
+    warpGroup.add(tunnel);
+    
+    scene.add(warpGroup);
+    warpRef.current = { group: warpGroup, lines: warpLines, tunnel: tunnel, speed: 0 };
+
+    // 6.2 SHOOTING STARS
+    const shootingStarsPool = [];
+    const shStarGeo = new THREE.ConeGeometry(0.2, 80, 8); // Long thin cone
+    shStarGeo.rotateX(Math.PI / 2); // Point along Z
+    const shStarMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+    
+    // Create pool
+    for(let i=0; i<5; i++) {
+        const mesh = new THREE.Mesh(shStarGeo, shStarMat.clone());
+        mesh.visible = false;
+        scene.add(mesh);
+        shootingStarsPool.push({ mesh, active: false, life: 0, velocity: new THREE.Vector3() });
+    }
+    shootingStarsRef.current = shootingStarsPool;
+
+    // 7. PARTICULAS (Fuego Motor) - Enhanced particle system
+    // Multiple particle layers for richer fire effect
+    const pGeoCore = new THREE.SphereGeometry(0.15, 6, 6);
+    const pGeoOuter = new THREE.SphereGeometry(0.25, 4, 4);
+    const pGeoSpark = new THREE.SphereGeometry(0.08, 4, 4);
+    
+    const createFireMaterial = (color, opacity = 0.9) => new THREE.MeshBasicMaterial({ 
+        color, 
+        transparent: true, 
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
     });
 
-    // Pool de partículas
+    // Pool de partículas - increased for smoother fire
     particles.current = [];
-    for(let i=0; i<80; i++) {
-        const m = new THREE.Mesh(pGeo, pMat.clone());
+    for(let i=0; i<150; i++) {
+        const type = i < 50 ? 'core' : (i < 100 ? 'outer' : 'spark');
+        const geo = type === 'core' ? pGeoCore : (type === 'outer' ? pGeoOuter : pGeoSpark);
+        const color = type === 'core' ? 0xffffff : (type === 'outer' ? 0xffaa00 : 0xff5500);
+        const m = new THREE.Mesh(geo, createFireMaterial(color, type === 'core' ? 1.0 : 0.8));
         m.visible = false;
         scene.add(m);
-        particles.current.push({ mesh: m, life: 0, velocity: new THREE.Vector3() });
+        particles.current.push({ 
+            mesh: m, 
+            life: 0, 
+            maxLife: 1,
+            velocity: new THREE.Vector3(),
+            type,
+            baseScale: type === 'core' ? 0.8 : (type === 'outer' ? 1.2 : 0.5)
+        });
     }
 
     // Cámara Inicial
     camera.position.set(0, 3, 12);
     camera.lookAt(0, 0, 0);
+    
+    // Initialize clock for delta time
+    clockRef.current = new THREE.Clock();
+    
+    // Initialize animation state
+    animState.current.shipPos.set(0, 0, 0);
+    animState.current.cameraPos.copy(camera.position);
 
     // --- LOOP DE ANIMACIÓN ---
     let animId;
     const animate = () => {
         animId = requestAnimationFrame(animate);
         
+        // Delta time for frame-rate independent animations
+        const dt = Math.min(clockRef.current.getDelta(), 0.1); // Cap to prevent jumps
+        const dtScale = dt * 60; // Normalize to 60fps
+        
         const isMining = window.missionActive;
         const duration = window.totalTime || 1;
-        const remaining = window.currentTime || 0;
-        const progress = 1 - (remaining / duration);
         const time = Date.now() * 0.001;
+        const state = animState.current;
+        
+        // SMOOTH PROGRESS CALCULATION - Uses internal timing instead of stepped timer
+        let progress = 0;
+        
+        if (isMining) {
+            // Detect mission start
+            if (!state.isMissionActive) {
+                state.isMissionActive = true;
+                state.missionStartTime = performance.now();
+                state.smoothProgress = 0;
+            }
+            
+            // Calculate smooth progress based on elapsed time
+            const elapsedMs = performance.now() - state.missionStartTime;
+            const elapsedSeconds = elapsedMs / 1000;
+            const rawProgress = Math.min(elapsedSeconds / duration, 0.999); // Cap just below 1
+            
+            // Ultra-smooth interpolation to target progress
+            state.smoothProgress = damp(state.smoothProgress, rawProgress, 6.0, dt);
+            progress = state.smoothProgress;
+        } else {
+            // Mission ended or idle
+            if (state.isMissionActive) {
+                state.isMissionActive = false;
+                // Smoothly finish to 1.0 if mission just ended
+                state.smoothProgress = damp(state.smoothProgress, 0, 3.0, dt);
+            }
+            progress = state.smoothProgress;
+        }
 
-        // -- ANIMACIÓN NAVE --
+        // -- ANIMACIÓN NAVE (ULTRA SMOOTH) --
         if(shipRef.current) {
             let targetZ = 0;
             let targetY = 0;
+            let targetX = 0;
             let targetRotY = 0;
-            let targetRotZ = 0; // Rotación de "Verticalidad" (Morro arriba)
-            let targetBank = 0;
+            let targetRotZ = 0;
+            let targetRotX = 0;
+            
+            // Smoothing factors (higher = faster response)
+            const posSmooth = 4.0;
+            const rotSmooth = 3.0;
 
             if (isMining) {
-                // Durante la misión, ejecutamos el ciclo de vuelo y aterrizaje
-                
-                // Coordenadas de "Aterrizaje"
-                // Planeta en Z = -300, Radio 60. Superficie aprox en Z = -240.
-                const surfaceZ = -238; 
-                const hoverHeight = 10; // Altura de la superficie en Y
+                // Durante la misión, ejecutamos el ciclo de vuelo
+                // Planet surface is at Z = -240 (planet at -300, radius 60)
+                const approachZ = -200;  // Stop before planet
+                const orbitY = 15;       // Orbit height
 
-                // FASE 1: IDA (0% - 40%) - Viajar hacia el planeta lejano
-                if(progress < 0.4) {
-                    const phaseP = progress / 0.4;
-                    // Moverse de Z=0 a Z=-220 (Cerca del planeta)
-                    targetZ = -220 * phaseP;
-                    // Vuelo lineal (sin arco irreal hacia arriba)
-                    targetY = 10 * phaseP; 
-                    targetRotY = Math.PI / 2; // Volar recto
-                    targetBank = 0;
+                // Ensure visibility is reset
+                shipRef.current.visible = true;
+
+                // FASE 1: VIAJE DE IDA (0% - 35%) - Travel to planet
+                if(progress < 0.35) {
+                    const phaseP = easeInOutCubic(progress / 0.35);
+                    targetZ = approachZ * phaseP;
+                    // Gentle arc trajectory - rise then level out
+                    const arcHeight = Math.sin(phaseP * Math.PI) * 12;
+                    targetY = orbitY * phaseP + arcHeight;
+                    // Ship faces forward (negative Z direction)
+                    targetRotY = Math.PI / 2;
+                    // Subtle nose pitch following the arc
+                    targetRotX = Math.cos(phaseP * Math.PI) * 0.12;
+                    // Gentle banking during cruise
+                    targetRotZ = Math.sin(time * 1.2) * 0.06;
                 } 
-                // FASE 2: APROXIMACIÓN Y ATERRIZAJE VERTICAL (40% - 50%)
-                else if(progress < 0.5) {
-                    const phaseP = (progress - 0.4) / 0.1;
-                    targetZ = -220 + (surfaceZ - (-220)) * phaseP;
-                    targetY = 10; // Altura final
-                    targetRotY = Math.PI / 2; 
-                    // ROTACIÓN VERTICAL: Girar 90 grados en Z local para que el morro apunte arriba
-                    targetRotZ = (Math.PI / 2) * phaseP; 
-                }
-                // FASE 3: MINADO EN SUPERFICIE (50% - 60%)
-                else if(progress < 0.6) {
-                    targetZ = surfaceZ;
-                    targetY = 10;
-                    targetRotY = Math.PI / 2;
-                    targetRotZ = Math.PI / 2; // Mantener vertical
-                    // Vibración
-                    shipRef.current.position.x = (Math.random()-0.5) * 0.2;
-                }
-                // FASE 4: DESPEGUE (60% - 70%)
+                // FASE 2: ORBITA/SUPERFICIE (35% - 70%) - HANDOFF TO SURFACE SCENE
                 else if(progress < 0.7) {
-                    const phaseP = (progress - 0.6) / 0.1;
-                    targetZ = surfaceZ + 20 * phaseP; // Alejarse un poco
-                    targetY = 10 + 20 * phaseP; // Subir
-                    targetRotY = Math.PI / 2;
-                    // Volver a horizontal
-                    targetRotZ = (Math.PI / 2) * (1 - phaseP);
+                    // Ship waits in orbit (or is hidden)
+                    // We hide it to let SurfaceScene take over visually
+                    shipRef.current.visible = false;
+                    
+                    // Keep target coords stable just in case
+                    targetZ = approachZ;
+                    targetY = orbitY;
                 }
-                // FASE 5: REGRESO (70% - 100%)
+                // FASE 5: REGRESO A CASA (70% - 100%) - Return journey
                 else {
-                    const returnProgress = (progress - 0.7) / 0.3;
-                    // De la posición de despegue (surfaceZ + 20 = -218) a 0
-                    targetZ = (surfaceZ + 20) * (1 - returnProgress);
-                    // Regreso lineal descendente
-                    targetY = 30 * (1 - returnProgress);
-                    targetRotY = Math.PI / 2 + Math.PI; // Vuelta completa para mirar a casa
-                    targetRotZ = 0;
+                    shipRef.current.visible = true;
+                    
+                    const phaseP = easeInOutCubic((progress - 0.7) / 0.3);
+                    // Travel from near planet back to origin
+                    const startZ = approachZ; // Start return from approach point
+                    const startY = orbitY;
+                    targetZ = startZ * (1 - phaseP);
+                    // Gentle descent arc back home
+                    const arcHeight = Math.sin(phaseP * Math.PI) * 8;
+                    targetY = startY * (1 - phaseP) + arcHeight;
+                    // Ship faces home (positive Z direction, so -PI/2)
+                    targetRotY = -Math.PI / 2;
+                    // Subtle nose movements following the arc
+                    targetRotX = Math.cos(phaseP * Math.PI) * 0.08;
+                    // Gentle cruise banking
+                    targetRotZ = Math.sin(time * 1.0) * 0.04 * (1 - phaseP);
                 }
 
-                // Interpolaciones directas para suavidad
-                shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, targetZ, 0.08);
-                shipRef.current.position.y = THREE.MathUtils.lerp(shipRef.current.position.y, targetY, 0.08);
+                // Ultra-smooth position interpolation using damping
+                state.shipPos.x = damp(state.shipPos.x, targetX, posSmooth, dt);
+                state.shipPos.y = damp(state.shipPos.y, targetY, posSmooth, dt);
+                state.shipPos.z = damp(state.shipPos.z, targetZ, posSmooth, dt);
                 
-                // Gestión de rotación Y (Evitar giros de 360 innecesarios)
-                let currentY = shipRef.current.rotation.y;
-                if (Math.abs(targetRotY - currentY) > Math.PI) {
-                     if (targetRotY > currentY) currentY += 2 * Math.PI;
-                     else currentY -= 2 * Math.PI;
-                }
-                shipRef.current.rotation.y = THREE.MathUtils.lerp(currentY, targetRotY, 0.05);
+                shipRef.current.position.copy(state.shipPos);
                 
-                // Rotación Z (Verticalidad)
-                shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, targetRotZ, 0.05);
-
-                // Reset X
-                shipRef.current.rotation.x = THREE.MathUtils.lerp(shipRef.current.rotation.x, 0, 0.1);
+                // Handle rotation Y wrapping for smooth transitions
+                let currentRotY = state.shipRot.y;
+                let deltaRotY = targetRotY - currentRotY;
+                // Normalize to -PI to PI
+                while(deltaRotY > Math.PI) deltaRotY -= Math.PI * 2;
+                while(deltaRotY < -Math.PI) deltaRotY += Math.PI * 2;
+                
+                state.shipRot.y = damp(currentRotY, currentRotY + deltaRotY, rotSmooth, dt);
+                state.shipRot.z = damp(state.shipRot.z, targetRotZ, rotSmooth, dt);
+                state.shipRot.x = damp(state.shipRot.x, targetRotX, rotSmooth, dt);
+                
+                shipRef.current.rotation.y = state.shipRot.y;
+                shipRef.current.rotation.z = state.shipRot.z;
+                shipRef.current.rotation.x = state.shipRot.x;
 
             } else {
-                // IDLE: Rotación continua de exhibición en base
-                targetZ = 0;
-                shipRef.current.rotation.y += 0.005; // ROTACIÓN CONTINUA
-                shipRef.current.position.y = Math.sin(time * 2) * 0.5; 
-                shipRef.current.position.z = THREE.MathUtils.lerp(shipRef.current.position.z, 0, 0.05);
-                shipRef.current.rotation.z = THREE.MathUtils.lerp(shipRef.current.rotation.z, 0, 0.05);
-                shipRef.current.rotation.x = 0;
+                // IDLE: Smooth exhibition rotation
+                state.shipRot.y += 0.008 * dtScale;
+                
+                // Smooth floating motion with multiple frequencies
+                const floatY = Math.sin(time * 1.5) * 0.4 + Math.sin(time * 2.3) * 0.15;
+                const floatX = Math.sin(time * 1.1) * 0.1;
+                
+                state.shipPos.y = damp(state.shipPos.y, floatY, 3.0, dt);
+                state.shipPos.z = damp(state.shipPos.z, 0, 2.0, dt);
+                state.shipPos.x = damp(state.shipPos.x, floatX, 3.0, dt);
+                state.shipRot.z = damp(state.shipRot.z, Math.sin(time * 0.8) * 0.05, 2.0, dt);
+                state.shipRot.x = damp(state.shipRot.x, Math.sin(time * 1.2) * 0.03, 2.0, dt);
+                
+                shipRef.current.position.copy(state.shipPos);
+                shipRef.current.rotation.y = state.shipRot.y;
+                shipRef.current.rotation.z = state.shipRot.z;
+                shipRef.current.rotation.x = state.shipRot.x;
             }
         }
 
-        // -- CÁMARA (LÓGICA ACTUALIZADA) --
+        // -- CÁMARA (ULTRA SMOOTH) --
         if (cameraRef.current) {
+            const camSmooth = 2.5;
+            
             if (isMining) {
-                // CÁMARA FIJA DE MISIÓN:
-                // Se coloca a un lado y atrás para ver todo el recorrido (Z=0 a Z=-300)
-                // Posición: X=40 (Lado), Y=20 (Arriba), Z=20 (Arriba del inicio)
-                const fixedPos = new THREE.Vector3(40, 20, 20);
-                cameraRef.current.position.lerp(fixedPos, 0.05);
+                // Dynamic camera that follows the action smoothly
+                let targetCamPos;
+                let targetLookAt;
                 
-                // Mirar hacia un punto medio del trayecto para encuadrar planeta y nave
-                const lookAtTarget = new THREE.Vector3(0, 0, -100);
-                cameraRef.current.lookAt(lookAtTarget);
+                if(progress < 0.35) {
+                    // Follow from side during outbound travel
+                    const shipZ = state.shipPos.z;
+                    const followDist = 35;
+                    targetCamPos = new THREE.Vector3(
+                        20 + Math.sin(time * 0.3) * 2,
+                        12 + Math.sin(time * 0.5) * 1.5,
+                        shipZ + followDist
+                    );
+                    targetLookAt = new THREE.Vector3(0, state.shipPos.y, shipZ - 20);
+                } else if(progress < 0.55) {
+                    // Closer orbital view during landing/mining
+                    targetCamPos = new THREE.Vector3(
+                        30 + Math.sin(time * 0.4) * 2,
+                        20 + Math.sin(time * 0.6) * 1.5,
+                        -170
+                    );
+                    targetLookAt = new THREE.Vector3(0, 8, -220);
+                } else if(progress < 0.7) {
+                    // Pull out for takeoff and turn
+                    const phaseP = (progress - 0.55) / 0.15;
+                    targetCamPos = new THREE.Vector3(
+                        35 - phaseP * 10,
+                        25 + phaseP * 5,
+                        -150 + phaseP * 50
+                    );
+                    targetLookAt = new THREE.Vector3(0, state.shipPos.y, state.shipPos.z);
+                } else {
+                    // Follow from side during return journey
+                    const shipZ = state.shipPos.z;
+                    const returnP = (progress - 0.7) / 0.3;
+                    targetCamPos = new THREE.Vector3(
+                        -20 - Math.sin(time * 0.3) * 2,
+                        12 + Math.sin(time * 0.5) * 1.5 - returnP * 5,
+                        shipZ - 35
+                    );
+                    targetLookAt = new THREE.Vector3(0, state.shipPos.y, shipZ + 20);
+                }
+                
+                // Smooth camera position
+                state.cameraPos.x = damp(state.cameraPos.x, targetCamPos.x, camSmooth, dt);
+                state.cameraPos.y = damp(state.cameraPos.y, targetCamPos.y, camSmooth, dt);
+                state.cameraPos.z = damp(state.cameraPos.z, targetCamPos.z, camSmooth, dt);
+                cameraRef.current.position.copy(state.cameraPos);
+                
+                // Smooth look-at target
+                state.cameraTarget.x = damp(state.cameraTarget.x, targetLookAt.x, camSmooth * 1.5, dt);
+                state.cameraTarget.y = damp(state.cameraTarget.y, targetLookAt.y, camSmooth * 1.5, dt);
+                state.cameraTarget.z = damp(state.cameraTarget.z, targetLookAt.z, camSmooth * 1.5, dt);
+                cameraRef.current.lookAt(state.cameraTarget);
+                
             } else {
-                // Cámara de exhibición (Idle)
-                cameraRef.current.position.z = THREE.MathUtils.lerp(cameraRef.current.position.z, 12, 0.05);
-                cameraRef.current.position.y = THREE.MathUtils.lerp(cameraRef.current.position.y, 3, 0.05);
-                cameraRef.current.position.x = THREE.MathUtils.lerp(cameraRef.current.position.x, 0, 0.05);
+                // Smooth idle camera with gentle movement
+                const idlePos = new THREE.Vector3(
+                    Math.sin(time * 0.2) * 2,
+                    3 + Math.sin(time * 0.3) * 0.5,
+                    12 + Math.sin(time * 0.25) * 1
+                );
+                
+                state.cameraPos.x = damp(state.cameraPos.x, idlePos.x, camSmooth, dt);
+                state.cameraPos.y = damp(state.cameraPos.y, idlePos.y, camSmooth, dt);
+                state.cameraPos.z = damp(state.cameraPos.z, idlePos.z, camSmooth, dt);
+                cameraRef.current.position.copy(state.cameraPos);
+                
                 if(shipRef.current) {
-                    cameraRef.current.lookAt(shipRef.current.position.x, 0, shipRef.current.position.z - 10);
+                    const lookTarget = new THREE.Vector3(
+                        state.shipPos.x,
+                        state.shipPos.y * 0.5,
+                        state.shipPos.z - 5
+                    );
+                    state.cameraTarget.x = damp(state.cameraTarget.x, lookTarget.x, 3.0, dt);
+                    state.cameraTarget.y = damp(state.cameraTarget.y, lookTarget.y, 3.0, dt);
+                    state.cameraTarget.z = damp(state.cameraTarget.z, lookTarget.z, 3.0, dt);
+                    cameraRef.current.lookAt(state.cameraTarget);
                 }
             }
         }
 
-        // -- PLANETA --
-        if(planetRef.current) planetRef.current.rotation.y += 0.0005;
-
-        // -- ESTRELLAS (Efecto velocidad solo si no estamos aterrizados) --
-        if(starsRef.current) {
-            // Detener estrellas si estamos en el suelo (40% - 70%)
-            const landed = (progress > 0.4 && progress < 0.7);
-            const speed = (isMining && !landed) ? 2 : 0.1;
-            const pos = starsRef.current.geometry.attributes.position.array;
-            for(let i=0; i<3000; i++) {
-                pos[i*3] -= speed;
-                if(pos[i*3] < -500) pos[i*3] = 500;
-            }
-            starsRef.current.geometry.attributes.position.needsUpdate = true;
+        // -- PLANETA (smooth rotation with subtle wobble) --
+        if(planetRef.current) {
+            planetRef.current.rotation.y += 0.0008 * dtScale;
+            // Subtle axial tilt wobble
+            planetRef.current.rotation.x = Math.sin(time * 0.1) * 0.02;
         }
 
-        // -- PARTÍCULAS (FUEGO) --
-        const pList = particles.current;
-        // Si está aterrizado (vertical), apagar motor principal visualmente o reducir mucho
-        const landed = (progress > 0.45 && progress < 0.65);
-        const spawnRate = (isMining && !landed) ? 0.8 : (landed ? 0.1 : 0.3);
-        const fireScale = isMining ? 2.0 : 0.8;
-        const fireColor = isMining ? 0x00ffff : 0xff5500;
+        // -- ESTRELLAS & WARP & SHOOTING STARS --
         
-        // Spawnear nuevas
-        if(Math.random() < spawnRate) {
+        // 1. Calculate Global Speed Factor
+        let targetSpeed = 0.5; // Base idle speed
+        const isLanded = (progress > 0.42 && progress < 0.58);
+        const isTurning = (progress > 0.55 && progress < 0.72);
+        
+        if(isMining) {
+            if(isLanded) {
+                targetSpeed = 0.1; 
+            } else if(isTurning) {
+                targetSpeed = 0.5;
+            } else if(progress < 0.35) {
+                // Outbound - accelerate
+                targetSpeed = 8.0 * easeInOutCubic(progress / 0.35);
+            } else if(progress > 0.7) {
+                // Return - accelerate
+                const returnP = (progress - 0.7) / 0.3;
+                targetSpeed = 8.0 * (1 - easeInOutCubic(returnP) * 0.5);
+            } else {
+                targetSpeed = 2.0;
+            }
+        }
+        
+        // Smoothly interpolate speed
+        if (!starsRef.current.userData.speed) starsRef.current.userData.speed = 0.1;
+        const currentSpeed = THREE.MathUtils.lerp(starsRef.current.userData.speed, targetSpeed, 0.03);
+        starsRef.current.userData.speed = currentSpeed;
+        
+        // 2. Animate Star Layers (Parallax)
+        if(starsRef.current) {
+            starsRef.current.children.forEach(layer => {
+                const s = layer.userData.speedFactor * currentSpeed;
+                const pos = layer.geometry.attributes.position.array;
+                const count = pos.length / 3;
+                for(let i=0; i<count; i++) {
+                    pos[i*3+2] += s * dtScale * 10; 
+                    if(pos[i*3+2] > 200) pos[i*3+2] -= 1500; // Reset to far back
+                }
+                layer.geometry.attributes.position.needsUpdate = true;
+            });
+        }
+        
+        // 3. Animate Warp Effect
+        if (warpRef.current) {
+             const { lines, tunnel } = warpRef.current;
+             
+             // Warp threshold (Disable on return trip to avoid visual glitches)
+             const isWarping = currentSpeed > 3.0 && progress < 0.5;
+             const targetOpacity = isWarping ? Math.min((currentSpeed - 3.0) * 0.2, 0.8) : 0;
+             
+             // Update Lines
+             lines.material.opacity = damp(lines.material.opacity, targetOpacity, 5.0, dt);
+             if (lines.material.opacity > 0.01) {
+                 const pos = lines.geometry.attributes.position.array;
+                 const count = pos.length / 6;
+                 const warpSpeed = currentSpeed * 20; // Faster than stars
+                 
+                 for(let i=0; i<count; i++) {
+                     // Move both start and end Z
+                     pos[i*6+2] += warpSpeed * dtScale;
+                     pos[i*6+5] += warpSpeed * dtScale;
+                     
+                     // Wrap
+                     if(pos[i*6+2] > 200) {
+                         const len = pos[i*6+5] - pos[i*6+2];
+                         const zStart = -800 - Math.random() * 200;
+                         pos[i*6+2] = zStart;
+                         pos[i*6+5] = zStart + len;
+                     }
+                 }
+                 lines.geometry.attributes.position.needsUpdate = true;
+             }
+             
+             // Update Tunnel
+             tunnel.material.opacity = damp(tunnel.material.opacity, isWarping ? 0.3 : 0, 2.0, dt);
+             tunnel.rotation.z += currentSpeed * 0.005 * dtScale;
+        }
+
+        // 4. Shooting Stars
+        const shootingStars = shootingStarsRef.current;
+        // Spawn chance
+        if (Math.random() < 0.02 * (isMining ? 2 : 1)) {
+            const available = shootingStars.find(s => !s.active);
+            if (available) {
+                available.active = true;
+                available.life = 1.0;
+                
+                // Random position
+                const startX = (Math.random() - 0.5) * 400;
+                const startY = (Math.random() - 0.5) * 200 + 50;
+                const startZ = -400; // Start far away
+                
+                available.mesh.position.set(startX, startY, startZ);
+                // Random trajectory coming towards camera/crossing
+                available.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 20, 
+                    (Math.random() - 0.5) * 10, 
+                    200 + Math.random() * 100 // Fast Z movement
+                );
+                
+                available.mesh.visible = true;
+                available.mesh.material.opacity = 1;
+                
+                // Orient to velocity
+                available.mesh.lookAt(
+                    available.mesh.position.x + available.velocity.x,
+                    available.mesh.position.y + available.velocity.y,
+                    available.mesh.position.z + available.velocity.z
+                );
+            }
+        }
+        
+        // Update Active Shooting Stars
+        shootingStars.forEach(s => {
+            if (s.active) {
+                s.mesh.position.add(s.velocity.clone().multiplyScalar(dt * 2)); // Move fast
+                s.life -= dt * 1.5;
+                s.mesh.material.opacity = s.life;
+                
+                if (s.life <= 0 || s.mesh.position.z > 100) {
+                    s.active = false;
+                    s.mesh.visible = false;
+                }
+            }
+        });
+
+        // -- PARTÍCULAS (FUEGO ULTRA SMOOTH) --
+        const pList = particles.current;
+        const landed = (progress > 0.43 && progress < 0.57);
+        
+        // Smooth spawn rates
+        const baseSpawnRate = isMining ? 0.95 : 0.6;
+        const spawnRate = landed ? 0.3 : baseSpawnRate;
+        const fireIntensity = isMining ? 2.5 : 1.0;
+        
+        // Color gradient based on mission state
+        const coreColor = isMining ? 0xffffff : 0xffffaa;
+        const midColor = isMining ? 0x00ccff : 0xffaa00;
+        const outerColor = isMining ? 0x0066ff : 0xff5500;
+        
+        // Spawn multiple particles per frame for denser fire
+        const spawnCount = Math.random() < spawnRate ? (isMining ? 3 : 2) : 0;
+        
+        for(let s = 0; s < spawnCount; s++) {
             const p = pList.find(x => x.life <= 0);
             if(p && shipRef.current) {
-                p.life = 1;
+                p.maxLife = 0.8 + Math.random() * 0.4;
+                p.life = p.maxLife;
                 p.mesh.visible = true;
                 
-                // Nacer en el motor (-1.8 en X local)
-                // OJO: Si cargamos un GLB, hay que ver donde esta el motor. 
-                // Asumimos que esta en -X (hacia atras).
-                const offset = new THREE.Vector3(-1.8, 0, 0); 
+                // Randomized spawn position around engine nozzle
+                const nozzleOffset = -1.8 - Math.random() * 0.3;
+                const spread = p.type === 'core' ? 0.1 : (p.type === 'outer' ? 0.25 : 0.15);
+                const offset = new THREE.Vector3(
+                    nozzleOffset,
+                    (Math.random() - 0.5) * spread,
+                    (Math.random() - 0.5) * spread
+                );
                 offset.applyEuler(shipRef.current.rotation);
                 p.mesh.position.copy(shipRef.current.position).add(offset);
                 
-                // Velocidad relativa a la rotación de la nave
-                // Si la nave está vertical, el fuego debe ir hacia abajo (Y-)
-                const speed = isMining ? 0.8 : 0.2;
-                const vel = new THREE.Vector3(-speed - Math.random()*0.2, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1);
+                // Velocity with turbulence
+                const baseSpeed = (isMining ? 0.6 : 0.15) * (p.type === 'core' ? 1.2 : 1.0);
+                const turbulence = p.type === 'spark' ? 0.15 : 0.08;
+                const vel = new THREE.Vector3(
+                    -baseSpeed - Math.random() * 0.15,
+                    (Math.random() - 0.5) * turbulence,
+                    (Math.random() - 0.5) * turbulence
+                );
                 vel.applyEuler(shipRef.current.rotation);
                 p.velocity.copy(vel);
-
-                p.mesh.material.color.setHex(fireColor);
-                p.mesh.material.opacity = 1; 
+                
+                // Set color based on particle type
+                const color = p.type === 'core' ? coreColor : (p.type === 'outer' ? midColor : outerColor);
+                p.mesh.material.color.setHex(color);
+                p.mesh.material.opacity = 1;
             }
         }
         
-        // Actualizar existentes
+        // Update existing particles with smooth decay
         pList.forEach(p => {
             if(p.life > 0) {
-                p.life -= 0.03;
-                p.mesh.position.add(p.velocity);
-                p.mesh.scale.setScalar(p.life * fireScale); 
-                p.mesh.material.opacity = p.life;
+                const lifeRatio = p.life / p.maxLife;
+                const decayRate = 0.025 * dtScale * (p.type === 'spark' ? 1.5 : 1.0);
+                p.life -= decayRate;
+                
+                // Smooth velocity with slight drag and gravity
+                p.velocity.multiplyScalar(0.98);
+                p.velocity.y -= 0.002 * dtScale; // Subtle gravity
+                
+                // Add subtle turbulence
+                p.velocity.x += (Math.random() - 0.5) * 0.01;
+                p.velocity.y += (Math.random() - 0.5) * 0.008;
+                p.velocity.z += (Math.random() - 0.5) * 0.008;
+                
+                p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                
+                // Smooth scale curve
+                const scaleCurve = smoothStep(lifeRatio) * fireIntensity * p.baseScale;
+                p.mesh.scale.setScalar(scaleCurve);
+                
+                // Smooth opacity fade
+                const opacityCurve = lifeRatio * lifeRatio;
+                p.mesh.material.opacity = opacityCurve;
+                
                 if(p.life <= 0) p.mesh.visible = false;
             }
         });
 
-        // Luz Motor
-        if (engineLightRef.current) {
-            // Apagar luz si está aterrizado
-            const intensity = landed ? 0.5 : (isMining ? 8 : 2 + Math.sin(time * 5));
-            engineLightRef.current.intensity = THREE.MathUtils.lerp(engineLightRef.current.intensity, intensity, 0.1);
-            engineLightRef.current.color.setHex(fireColor);
+        // Luz Motor (smooth pulsing)
+        if (engineLightRef.current && shipRef.current) {
+            // Target intensity with smooth pulsing
+            const basePulse = Math.sin(time * 8) * 0.3 + Math.sin(time * 13) * 0.15;
+            let targetIntensity = landed ? 1.5 : (isMining ? 10 + basePulse * 3 : 3 + basePulse);
+            
+            // Smooth intensity transition
+            state.engineIntensity = damp(state.engineIntensity, targetIntensity, 4.0, dt);
+            engineLightRef.current.intensity = state.engineIntensity;
+            
+            // Smooth color transition
+            const targetColor = isMining ? 0x00aaff : 0xffaa00;
+            const currentColor = new THREE.Color(engineLightRef.current.color);
+            const targetColorObj = new THREE.Color(targetColor);
+            currentColor.lerp(targetColorObj, 0.05);
+            engineLightRef.current.color.copy(currentColor);
+            
+            // Update light position to follow ship engine
+            const lightOffset = new THREE.Vector3(-2.5, 0, 0);
+            lightOffset.applyEuler(shipRef.current.rotation);
+            engineLightRef.current.position.copy(shipRef.current.position).add(lightOffset);
         }
 
         composer.render();

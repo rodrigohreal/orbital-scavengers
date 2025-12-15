@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 
 // Components
 import Scene3D from './components/Scene3D';
+import SurfaceScene from './components/SurfaceScene';
 import RewardModal from './components/RewardModal';
 import { Icons } from './components/Icons';
 
@@ -48,7 +49,8 @@ export default function App() {
   }, [missionState, timeLeft]);
 
   const startMission = () => {
-    const duration = Math.max(5, 10 - Math.floor(droneLevel/5));
+    // Longer mission time for more cinematic experience (15s base)
+    const duration = Math.max(10, 15 - Math.floor(droneLevel/10));
     setTotalDuration(duration);
     setTimeLeft(duration);
     setMissionState('mining');
@@ -169,6 +171,7 @@ export default function App() {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black text-white font-rajdhani select-none">
       <Scene3D missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
+      <SurfaceScene missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
       
       {/* UI LAYER */}
       <div className="absolute inset-0 flex flex-col justify-between z-10 pointer-events-none">
