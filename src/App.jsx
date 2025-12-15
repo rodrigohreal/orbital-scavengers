@@ -463,8 +463,8 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
                     const phaseP = progress / 0.4;
                     // Moverse de Z=0 a Z=-220 (Cerca del planeta)
                     targetZ = -220 * phaseP;
-                    // Subir un poco para arco
-                    targetY = 20 * Math.sin(phaseP * Math.PI); 
+                    // Subir un poco para arco, conectando con Y=10 de la siguiente fase
+                    targetY = 10 * phaseP + 50 * Math.sin(phaseP * Math.PI); 
                     targetRotY = Math.PI / 2; // Volar recto
                     targetBank = 0;
                 } 
@@ -498,9 +498,10 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
                 // FASE 5: REGRESO (70% - 100%)
                 else {
                     const returnProgress = (progress - 0.7) / 0.3;
-                    // De -220 a 0
-                    targetZ = -220 * (1 - returnProgress);
-                    targetY = 20 * Math.sin((1-returnProgress) * Math.PI);
+                    // De la posición de despegue (surfaceZ + 20 = -218) a 0
+                    targetZ = (surfaceZ + 20) * (1 - returnProgress);
+                    // De la altura de despegue (30) a 0, con arco
+                    targetY = 30 * (1 - returnProgress) + 50 * Math.sin((1-returnProgress) * Math.PI);
                     targetRotY = Math.PI / 2 + Math.PI; // Vuelta completa para mirar a casa
                     targetRotZ = 0;
                 }
