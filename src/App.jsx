@@ -327,12 +327,12 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
             // Normalmente en Threejs "adelante" es -Z, pero nuestra lógica anima asumiendo X o Z.
             // Para simplificar, rotamos el modelo cargado para que "mire" hacia +X que es donde ponemos el fuego del motor (-X es atras).
             // Esto depende de cómo fue exportado el GLB. Ajuste genérico:
-            loadedShip.rotation.y = Math.PI; // A veces vienen mirando al revés
+            loadedShip.rotation.y = 0; // A veces vienen mirando al revés
             
             // Normalizar escala si es muy grande o muy pequeña
             // Queremos que mida aprox 2-3 unidades de largo
             const maxDim = Math.max(size.x, size.y, size.z);
-            const targetSize = 3.0;
+            const targetSize = 3.45;
             if(maxDim > 0) {
                 const scaleFactor = targetSize / maxDim;
                 loadedShip.scale.set(scaleFactor, scaleFactor, scaleFactor);
