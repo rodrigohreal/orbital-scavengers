@@ -357,9 +357,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
         }
     );
 
-    // Inicialmente (antes de que cargue o falle) ponemos la procedural para que no se vea vacío
-    const initialShip = createProceduralShip();
-    shipContainer.add(initialShip);
+    // Inicialmente no mostramos nada mientras carga el GLB. Si falla, el loader usará createProceduralShip.
     
     // Rotación inicial del contenedor general (igual que antes)
     shipContainer.rotation.y = Math.PI / 2;
