@@ -307,26 +307,50 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
 
     // Intentar cargar GLB, si falla usar Procedural
     const loader = new GLTFLoader();
+    const modelPath = `${import.meta.env.BASE_URL}nave.glb`;
+    console.log(`Intentando cargar modelo desde: ${modelPath}`);
+    
     loader.load(
-        '/nave.glb',
+        modelPath,
         (gltf) => {
+            console.log("nave.glb cargado con éxito!", gltf);
             // ÉXITO: Usar modelo cargado
             const loadedShip = gltf.scene;
+            
+            // Debug: Calcular Bounding Box para ver tamaño
+            const box = new THREE.Box3().setFromObject(loadedShip);
+            const size = box.getSize(new THREE.Vector3());
+            console.log("Tamaño de nave.glb:", size);
+
             // Ajustar escala y rotación si es necesario para coincidir con la lógica
             // Asumimos que la nave en el GLB mira hacia algun lado. 
             // Normalmente en Threejs "adelante" es -Z, pero nuestra lógica anima asumiendo X o Z.
             // Para simplificar, rotamos el modelo cargado para que "mire" hacia +X que es donde ponemos el fuego del motor (-X es atras).
             // Esto depende de cómo fue exportado el GLB. Ajuste genérico:
             loadedShip.rotation.y = Math.PI; // A veces vienen mirando al revés
-            loadedShip.scale.set(0.5, 0.5, 0.5); // Escala preventiva
+            
+            // Normalizar escala si es muy grande o muy pequeña
+            // Queremos que mida aprox 2-3 unidades de largo
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const targetSize = 3.0;
+            if(maxDim > 0) {
+                const scaleFactor = targetSize / maxDim;
+                loadedShip.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                console.log("Escalando nave.glb por factor:", scaleFactor);
+            } else {
+                loadedShip.scale.set(0.5, 0.5, 0.5); // Fallback
+            }
             
             shipContainer.clear(); // Limpiar contenedor por si habia algo
             shipContainer.add(loadedShip);
         },
-        undefined, // Progress
+        (xhr) => {
+            console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+        },
         (error) => {
             // ERROR: Usar nave procedural
-            console.log("No se encontró nave.glb, usando nave por defecto.");
+            console.error("Error al cargar nave.glb:", error);
+            console.log("Usando nave por defecto (fallback).");
             const defaultShip = createProceduralShip();
             shipContainer.clear();
             shipContainer.add(defaultShip);
