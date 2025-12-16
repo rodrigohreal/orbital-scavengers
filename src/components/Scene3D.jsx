@@ -20,7 +20,7 @@ const damp = (current, target, smoothing, dt) => {
   return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-smoothing * dt));
 };
 
-const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
+const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spaceshipModel }) => {
   const mountRef = useRef(null);
   const shipRef = useRef(null);
   const planetRef = useRef(null);
@@ -185,20 +185,20 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
 
     // Intentar cargar GLB, si falla usar Procedural
     const loader = new GLTFLoader();
-    const modelPath = `${import.meta.env.BASE_URL}nave.glb`;
+    const modelPath = `${import.meta.env.BASE_URL}${spaceshipModel || 'nave.glb'}`;
     console.log(`Intentando cargar modelo desde: ${modelPath}`);
     
     loader.load(
         modelPath,
         (gltf) => {
-            console.log("nave.glb cargado con éxito!", gltf);
+            console.log(`${spaceshipModel || 'nave.glb'} cargado con éxito!`, gltf);
             // ÉXITO: Usar modelo cargado
             const loadedShip = gltf.scene;
             
             // Debug: Calcular Bounding Box para ver tamaño
             const box = new THREE.Box3().setFromObject(loadedShip);
             const size = box.getSize(new THREE.Vector3());
-            console.log("Tamaño de nave.glb:", size);
+            console.log(`Tamaño de ${spaceshipModel || 'nave.glb'}:`, size);
 
             // Ajustar escala y rotación si es necesario para coincidir con la lógica
             // Asumimos que la nave en el GLB mira hacia algun lado. 
@@ -214,7 +214,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
             if(maxDim > 0) {
                 const scaleFactor = targetSize / maxDim;
                 loadedShip.scale.set(scaleFactor, scaleFactor, scaleFactor);
-                console.log("Escalando nave.glb por factor:", scaleFactor);
+                console.log(`Escalando ${spaceshipModel || 'nave.glb'} por factor:`, scaleFactor);
             } else {
                 loadedShip.scale.set(0.5, 0.5, 0.5); // Fallback
             }
@@ -227,7 +227,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
         },
         (error) => {
             // ERROR: Usar nave procedural
-            console.error("Error al cargar nave.glb:", error);
+            console.error(`Error al cargar ${spaceshipModel || 'nave.glb'}:`, error);
             console.log("Usando nave por defecto (fallback).");
             const defaultShip = createProceduralShip();
             shipContainer.clear();
@@ -904,7 +904,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet }) => {
         if(mountRef.current) mountRef.current.innerHTML = '';
         renderer.dispose();
     };
-  }, [level, planet]);
+  }, [level, planet, spaceshipModel]);
 
   // Sync Vars
   useEffect(() => {

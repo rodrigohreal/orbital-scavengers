@@ -10,6 +10,12 @@ import { Icons } from './components/Icons';
 import { ITEMS_DB } from './data/items';
 import { PLANETS } from './data/planets';
 
+const SPACESHIPS = [
+  { id: 0, name: "Nave Estándar", model: "nave.glb", cost: 0, rarity: "Común" },
+  { id: 1, name: "Nave Básica", model: "n_basica.glb", cost: 1000, rarity: "Poco Común" },
+  { id: 2, name: "Nave Graffiti", model: "n_graffiti.glb", cost: 2000, rarity: "Rara" }
+];
+
 // --- APP PRINCIPAL ---
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -20,6 +26,10 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
   const [reward, setReward] = useState(null);
+  
+  // Selection Mode: 'planet' or 'spaceship'
+  const [selectionMode, setSelectionMode] = useState('planet');
+
   const [selectedPlanet, setSelectedPlanet] = useState(() => {
     const saved = localStorage.getItem('os_ultra_planet');
     return saved ? parseInt(saved) : 0;
@@ -29,13 +39,24 @@ export default function App() {
     return saved ? JSON.parse(saved) : [0]; // Planet 0 (Sistema Solar) is always unlocked
   });
 
+  const [selectedSpaceship, setSelectedSpaceship] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_spaceship');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [unlockedSpaceships, setUnlockedSpaceships] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_unlocked_spaceships');
+    return saved ? JSON.parse(saved) : [0]; // Spaceship 0 is always unlocked
+  });
+
   useEffect(() => {
     localStorage.setItem('os_ultra_credits', credits);
     localStorage.setItem('os_ultra_level', droneLevel);
     localStorage.setItem('os_ultra_inv', JSON.stringify(inventory));
     localStorage.setItem('os_ultra_planet', selectedPlanet);
     localStorage.setItem('os_ultra_unlocked_planets', JSON.stringify(unlockedPlanets));
-  }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets]);
+    localStorage.setItem('os_ultra_spaceship', selectedSpaceship);
+    localStorage.setItem('os_ultra_unlocked_spaceships', JSON.stringify(unlockedSpaceships));
+  }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets, selectedSpaceship, unlockedSpaceships]);
 
   useEffect(() => {
     let interval;
@@ -110,15 +131,35 @@ export default function App() {
     }
   };
 
+  const unlockSpaceship = (spaceshipId) => {
+    const ship = SPACESHIPS[spaceshipId];
+    if (!ship || unlockedSpaceships.includes(spaceshipId)) return;
+    if (credits >= ship.cost) {
+      setCredits(prev => prev - ship.cost);
+      setUnlockedSpaceships(prev => [...prev, spaceshipId]);
+      setSelectedSpaceship(spaceshipId);
+    }
+  };
+
   // --- NAVIGATION ---
-  const changePlanet = (dir) => {
+  const changeSelection = (dir) => {
     if (missionState === 'mining') return;
-    setSelectedPlanet(prev => {
-        const next = prev + dir;
-        if (next < 0) return PLANETS.length - 1;
-        if (next >= PLANETS.length) return 0;
-        return next;
-    });
+    
+    if (selectionMode === 'planet') {
+        setSelectedPlanet(prev => {
+            const next = prev + dir;
+            if (next < 0) return PLANETS.length - 1;
+            if (next >= PLANETS.length) return 0;
+            return next;
+        });
+    } else {
+        setSelectedSpaceship(prev => {
+            const next = prev + dir;
+            if (next < 0) return SPACESHIPS.length - 1;
+            if (next >= SPACESHIPS.length) return 0;
+            return next;
+        });
+    }
   };
 
   const sellEverything = () => {
@@ -168,9 +209,20 @@ export default function App() {
   const isPlanetUnlocked = unlockedPlanets.includes(currentPlanet.id);
   const canAffordPlanet = credits >= currentPlanet.cost;
 
+  const currentSpaceship = SPACESHIPS[selectedSpaceship];
+  const isSpaceshipUnlocked = unlockedSpaceships.includes(currentSpaceship.id);
+  const canAffordSpaceship = credits >= currentSpaceship.cost;
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black text-white font-rajdhani select-none">
-      <Scene3D missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
+      <Scene3D 
+        missionState={missionState} 
+        level={droneLevel} 
+        totalDuration={totalDuration} 
+        timeLeft={timeLeft} 
+        planet={currentPlanet}
+        spaceshipModel={SPACESHIPS[selectedSpaceship].model}
+      />
       <SurfaceScene missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
       
       {/* UI LAYER */}
@@ -194,43 +246,94 @@ export default function App() {
             {/* Mission Control Panel - Bottom Center */}
             <div className="w-full max-w-md mx-auto glass-panel p-5 rounded-3xl border border-blue-500/30 pointer-events-auto shadow-2xl bg-black/80 backdrop-blur-xl animate-[slideUp_0.6s_ease-out]">
               
+              {/* Toggle Switch */}
+              <div className="flex justify-center mb-4">
+                <div className="bg-gray-900/80 p-1 rounded-full border border-white/10 flex relative">
+                  <button 
+                    onClick={() => setSelectionMode('planet')}
+                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectionMode === 'planet' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                  >
+                    Planetas
+                  </button>
+                  <button 
+                    onClick={() => setSelectionMode('spaceship')}
+                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectionMode === 'spaceship' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                  >
+                    Naves
+                  </button>
+                </div>
+              </div>
+
               {/* Header Area: Planet Info OR Buy Button */}
               <div className="mb-4 text-center min-h-[60px] flex flex-col justify-center items-center">
-                {isPlanetUnlocked ? (
-                  <>
-                    <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
-                      {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
-                    </p>
-                    <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
-                      {currentPlanet.name}
-                    </h3>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">
-                      Multiplicador: {currentPlanet.rarityMultiplier.toFixed(1)}x
-                    </p>
-                  </>
+                {selectionMode === 'planet' ? (
+                    isPlanetUnlocked ? (
+                    <>
+                        <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
+                        {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
+                        </p>
+                        <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
+                        {currentPlanet.name}
+                        </h3>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">
+                        Multiplicador: {currentPlanet.rarityMultiplier.toFixed(1)}x
+                        </p>
+                    </>
+                    ) : (
+                    <button
+                        onClick={() => unlockPlanet(currentPlanet.id)}
+                        disabled={!canAffordPlanet}
+                        className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                            canAffordPlanet 
+                            ? 'bg-yellow-600 hover:bg-yellow-500 border-yellow-400 text-white animate-pulse'
+                            : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
+                    >
+                        <Icons.Lock size={14} />
+                        <div className="flex flex-col items-start leading-none">
+                            <span className="text-[10px]">COMPRAR {currentPlanet.name}</span>
+                            <span className="text-sm font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
+                        </div>
+                    </button>
+                    )
                 ) : (
-                  <button
-                    onClick={() => unlockPlanet(currentPlanet.id)}
-                    disabled={!canAffordPlanet}
-                    className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-                        canAffordPlanet 
-                        ? 'bg-yellow-600 hover:bg-yellow-500 border-yellow-400 text-white animate-pulse'
-                        : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <Icons.Lock size={14} />
-                    <div className="flex flex-col items-start leading-none">
-                        <span className="text-[10px]">COMPRAR {currentPlanet.name}</span>
-                        <span className="text-sm font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
-                    </div>
-                  </button>
+                    // SPACESHIP INFO / BUY
+                    isSpaceshipUnlocked ? (
+                        <>
+                            <p className="text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 text-purple-400">
+                            • NAVE SELECCIONADA •
+                            </p>
+                            <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
+                            {currentSpaceship.name}
+                            </h3>
+                            <p className="text-[10px] text-gray-500 uppercase tracking-wider">
+                            Rareza: {currentSpaceship.rarity}
+                            </p>
+                        </>
+                    ) : (
+                        <button
+                            onClick={() => unlockSpaceship(currentSpaceship.id)}
+                            disabled={!canAffordSpaceship}
+                            className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                                canAffordSpaceship 
+                                ? 'bg-purple-600 hover:bg-purple-500 border-purple-400 text-white animate-pulse'
+                                : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
+                            }`}
+                        >
+                            <Icons.Lock size={14} />
+                            <div className="flex flex-col items-start leading-none">
+                                <span className="text-[10px]">COMPRAR {currentSpaceship.name}</span>
+                                <span className="text-sm font-mono">{currentSpaceship.cost.toLocaleString()} ₡</span>
+                            </div>
+                        </button>
+                    )
                 )}
               </div>
 
               {/* Control Row: Arrows & Main Button */}
               <div className="flex items-center gap-3">
                   <button 
-                    onClick={() => changePlanet(-1)}
+                    onClick={() => changeSelection(-1)}
                     disabled={missionState === 'mining'}
                     className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
                   >
@@ -272,7 +375,7 @@ export default function App() {
                   </div>
 
                   <button 
-                    onClick={() => changePlanet(1)}
+                    onClick={() => changeSelection(1)}
                     disabled={missionState === 'mining'}
                     className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
                   >
