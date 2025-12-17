@@ -210,7 +210,7 @@ export default function App() {
   const canAffordPlanet = credits >= currentPlanet.cost;
 
   const currentSpaceship = SPACESHIPS[selectedSpaceship];
-  const isSpaceshipUnlocked = unlockedSpaceships.includes(currentSpaceship.id);
+  const isSpaceshipUnlocked = unlockedSpaceships.includes(currentSpaceship.id) || currentSpaceship.cost === 0;
   const canAffordSpaceship = credits >= currentSpaceship.cost;
 
   return (
@@ -344,14 +344,14 @@ export default function App() {
                     {missionState === 'idle' && (
                         <button 
                             onClick={startMission} 
-                            disabled={!isPlanetUnlocked}
+                            disabled={!isPlanetUnlocked || !isSpaceshipUnlocked}
                             className={`w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base transition-all ${
-                                isPlanetUnlocked
+                                isPlanetUnlocked && isSpaceshipUnlocked
                                 ? 'bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 text-white border-blue-800 active:border-b-0 active:translate-y-1 hover:shadow-blue-500/50'
                                 : 'bg-gray-800 text-gray-500 border-gray-900 cursor-not-allowed'
                             }`}
                         >
-                            {isPlanetUnlocked ? 'INICIAR MISIÓN' : 'BLOQUEADO'}
+                            {isPlanetUnlocked && isSpaceshipUnlocked ? 'INICIAR MISIÓN' : 'BLOQUEADO'}
                         </button>
                     )}
 
@@ -442,12 +442,6 @@ export default function App() {
             <h2 className="text-3xl font-bold text-white font-orbitron mb-2 text-center tracking-widest">INGENIERÍA</h2>
             <p className="text-center text-gray-500 text-xs uppercase tracking-widest mb-8">Mejoras de Dron & Sistemas</p>
             <div className="flex-1 flex flex-col items-center justify-center">
-              <div className="relative w-full max-w-xs aspect-square mb-8">
-                <div className="absolute inset-0 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
-                <div className="w-full h-full bg-gray-900/50 rounded-full border border-blue-500/30 flex items-center justify-center relative z-10 shadow-[0_0_50px_rgba(59,130,246,0.15)]">
-                  <div className="text-8xl filter drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">🛸</div>
-                </div>
-              </div>
               <div className="w-full max-w-sm bg-gray-900/80 rounded-2xl p-6 border border-white/10">
                 <div className="flex justify-between items-end mb-4">
                   <div><h3 className="text-lg font-bold text-white font-orbitron">Interceptor MK-{droneLevel + 1}</h3><p className="text-xs text-blue-400 uppercase tracking-widest">Próxima Generación</p></div>
