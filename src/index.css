@@ -147,3 +147,315 @@ button {
   color: #f472b6;
   text-shadow: 0 0 30px rgba(244, 114, 182, 1);
 }
+
+/* Nozzle Fire Animations - Particle-based system */
+/* 4 second cycle: 2s idle (0-50%) + 2s boost (50-100%) */
+
+.nozzle-fire-container {
+  /* Container is positioned via Tailwind's absolute inset-0 classes */
+}
+
+/* Base particle styles */
+.nozzle-particle {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: particleFlow 4s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+  transform: translateY(calc(-50% + var(--y-offset, 0px)));
+}
+
+/* Core particles - bright center, small */
+.nozzle-particle-core {
+  width: 6px;
+  height: 6px;
+  background: var(--particle-color);
+  box-shadow: 
+    0 0 4px var(--particle-color),
+    0 0 8px var(--particle-glow),
+    0 0 12px var(--particle-glow);
+  animation-name: particleFlowCore;
+}
+
+/* Mid particles - medium size */
+.nozzle-particle-mid {
+  width: 8px;
+  height: 8px;
+  background: var(--particle-color);
+  box-shadow: 
+    0 0 6px var(--particle-color),
+    0 0 10px var(--particle-glow);
+  opacity: 0.9;
+  animation-name: particleFlowMid;
+}
+
+/* Outer particles - sparks, smallest */
+.nozzle-particle-outer {
+  width: 4px;
+  height: 4px;
+  background: var(--particle-color);
+  box-shadow: 
+    0 0 3px var(--particle-color),
+    0 0 6px var(--particle-glow);
+  opacity: 0.7;
+  animation-name: particleFlowOuter;
+}
+
+/* Glow effect */
+.nozzle-glow {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at left, var(--glow-color-1) 0%, var(--glow-color-2) 30%, transparent 70%);
+  filter: blur(6px);
+  opacity: 0.6;
+  animation: glowPulse 4s ease-in-out infinite;
+}
+
+/* Core particle animation - travels shorter, faster decay */
+@keyframes particleFlowCore {
+  /* IDLE PHASE (0% - 50%) - slow, short distance */
+  0% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.5);
+  }
+  3% {
+    opacity: 1;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.9);
+  }
+  12% {
+    left: 50px;
+    opacity: 0.9;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 1px)) scale(0.85);
+  }
+  22% {
+    left: 85px;
+    opacity: 0.6;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 2px)) scale(0.7);
+  }
+  30% {
+    left: 110px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 3px)) scale(0.3);
+  }
+  /* Reset and wait */
+  31%, 49% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.5);
+  }
+  
+  /* BOOST PHASE (50% - 100%) - fast, long distance, larger */
+  50% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.8);
+  }
+  52% {
+    opacity: 1;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(1.4);
+  }
+  60% {
+    left: 100px;
+    opacity: 1;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) - 1px)) scale(1.3);
+  }
+  72% {
+    left: 200px;
+    opacity: 0.8;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 1px)) scale(1.1);
+  }
+  82% {
+    left: 280px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 2px)) scale(0.5);
+  }
+  83%, 100% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.8);
+  }
+}
+
+/* Mid particle animation - medium distance */
+@keyframes particleFlowMid {
+  /* IDLE PHASE */
+  0% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.4);
+  }
+  4% {
+    opacity: 0.85;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.75);
+  }
+  14% {
+    left: 55px;
+    opacity: 0.8;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 2px)) scale(0.7);
+  }
+  26% {
+    left: 100px;
+    opacity: 0.5;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 4px)) scale(0.5);
+  }
+  34% {
+    left: 130px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 5px)) scale(0.2);
+  }
+  35%, 49% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.4);
+  }
+  
+  /* BOOST PHASE */
+  50% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.6);
+  }
+  53% {
+    opacity: 1;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(1.2);
+  }
+  62% {
+    left: 120px;
+    opacity: 1;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) - 1px)) scale(1.1);
+  }
+  75% {
+    left: 220px;
+    opacity: 0.7;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 2px)) scale(0.9);
+  }
+  85% {
+    left: 300px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 4px)) scale(0.4);
+  }
+  86%, 100% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.6);
+  }
+}
+
+/* Outer particle animation - longest distance, most turbulent */
+@keyframes particleFlowOuter {
+  /* IDLE PHASE */
+  0% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.3);
+  }
+  5% {
+    opacity: 0.65;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.55);
+  }
+  16% {
+    left: 60px;
+    opacity: 0.6;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 3px)) scale(0.5);
+  }
+  28% {
+    left: 110px;
+    opacity: 0.35;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 5px)) scale(0.35);
+  }
+  36% {
+    left: 145px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 6px)) scale(0.1);
+  }
+  37%, 49% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.3);
+  }
+  
+  /* BOOST PHASE */
+  50% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.5);
+  }
+  54% {
+    opacity: 0.9;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.9);
+  }
+  64% {
+    left: 130px;
+    opacity: 0.85;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) - 2px)) scale(0.8);
+  }
+  77% {
+    left: 240px;
+    opacity: 0.5;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 3px)) scale(0.6);
+  }
+  88% {
+    left: 320px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px) + 6px)) scale(0.2);
+  }
+  89%, 100% {
+    left: 8px;
+    opacity: 0;
+    transform: translateY(calc(-50% + var(--y-offset, 0px))) scale(0.5);
+  }
+}
+
+/* Glow pulse animation - synced with idle/boost phases */
+@keyframes glowPulse {
+  /* IDLE PHASE - smaller, dimmer glow */
+  0%, 49% {
+    width: 60px;
+    height: 16px;
+    opacity: 0.4;
+    filter: blur(4px);
+  }
+  25% {
+    opacity: 0.5;
+  }
+  
+  /* BOOST PHASE - larger, brighter glow */
+  50% {
+    width: 60px;
+    height: 16px;
+    opacity: 0.5;
+    filter: blur(4px);
+  }
+  55% {
+    width: 150px;
+    height: 28px;
+    opacity: 0.9;
+    filter: blur(8px);
+  }
+  75% {
+    width: 180px;
+    height: 32px;
+    opacity: 1;
+    filter: blur(10px);
+  }
+  95% {
+    width: 150px;
+    height: 28px;
+    opacity: 0.8;
+    filter: blur(8px);
+  }
+  100% {
+    width: 60px;
+    height: 16px;
+    opacity: 0.4;
+    filter: blur(4px);
+  }
+}

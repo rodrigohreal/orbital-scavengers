@@ -16,6 +16,12 @@ const SPACESHIPS = [
   { id: 2, name: "Nave Graffiti", model: "n_graffiti.glb", cost: 2000, rarity: "Rara" }
 ];
 
+const NOZZLE_FIRES = [
+  { id: 0, name: "Fuego Estándar", cost: 0, colors: ['#ff6600', '#ffaa00', '#ffffff'], description: "Fuego naranja clásico" },
+  { id: 1, name: "Plasma Azul", cost: 1000, colors: ['#0066ff', '#00ccff', '#ffffff'], description: "Plasma frío y brillante" },
+  { id: 2, name: "Infierno Púrpura", cost: 2000, colors: ['#9900ff', '#ff00ff', '#ffffff'], description: "Llamas de energía oscura" }
+];
+
 // --- APP PRINCIPAL ---
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -48,6 +54,17 @@ export default function App() {
     return saved ? JSON.parse(saved) : [0]; // Spaceship 0 is always unlocked
   });
 
+  // Nozzle Fire state
+  const [selectedNozzleFire, setSelectedNozzleFire] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_nozzle');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [unlockedNozzleFires, setUnlockedNozzleFires] = useState(() => {
+    const saved = localStorage.getItem('os_ultra_unlocked_nozzles');
+    return saved ? JSON.parse(saved) : [0]; // Nozzle 0 is always unlocked
+  });
+  const [nozzleMenuOpen, setNozzleMenuOpen] = useState(false);
+
   useEffect(() => {
     localStorage.setItem('os_ultra_credits', credits);
     localStorage.setItem('os_ultra_level', droneLevel);
@@ -56,7 +73,9 @@ export default function App() {
     localStorage.setItem('os_ultra_unlocked_planets', JSON.stringify(unlockedPlanets));
     localStorage.setItem('os_ultra_spaceship', selectedSpaceship);
     localStorage.setItem('os_ultra_unlocked_spaceships', JSON.stringify(unlockedSpaceships));
-  }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets, selectedSpaceship, unlockedSpaceships]);
+    localStorage.setItem('os_ultra_nozzle', selectedNozzleFire);
+    localStorage.setItem('os_ultra_unlocked_nozzles', JSON.stringify(unlockedNozzleFires));
+  }, [credits, droneLevel, inventory, selectedPlanet, unlockedPlanets, selectedSpaceship, unlockedSpaceships, selectedNozzleFire, unlockedNozzleFires]);
 
   useEffect(() => {
     let interval;
@@ -141,6 +160,22 @@ export default function App() {
     }
   };
 
+  const unlockNozzleFire = (nozzleId) => {
+    const nozzle = NOZZLE_FIRES[nozzleId];
+    if (!nozzle || unlockedNozzleFires.includes(nozzleId)) return;
+    if (credits >= nozzle.cost) {
+      setCredits(prev => prev - nozzle.cost);
+      setUnlockedNozzleFires(prev => [...prev, nozzleId]);
+      setSelectedNozzleFire(nozzleId);
+    }
+  };
+
+  const selectNozzleFire = (nozzleId) => {
+    if (unlockedNozzleFires.includes(nozzleId)) {
+      setSelectedNozzleFire(nozzleId);
+    }
+  };
+
   // --- NAVIGATION ---
   const changeSelection = (dir) => {
     if (missionState === 'mining') return;
@@ -222,6 +257,7 @@ export default function App() {
         timeLeft={timeLeft} 
         planet={currentPlanet}
         spaceshipModel={SPACESHIPS[selectedSpaceship].model}
+        nozzleFire={NOZZLE_FIRES[selectedNozzleFire]}
       />
       <SurfaceScene missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
       
@@ -438,10 +474,11 @@ export default function App() {
 
         {/* SHOP TAB */}
         {activeTab === 'shop' && (
-          <div className="h-full bg-black/90 backdrop-blur-xl p-6 pt-12 pb-32 pointer-events-auto animate-[slideUp_0.4s_ease-out] flex flex-col">
+          <div className="h-full bg-black/90 backdrop-blur-xl p-6 pt-12 pb-32 pointer-events-auto animate-[slideUp_0.4s_ease-out] flex flex-col overflow-y-auto">
             <h2 className="text-3xl font-bold text-white font-orbitron mb-2 text-center tracking-widest">INGENIERÍA</h2>
             <p className="text-center text-gray-500 text-xs uppercase tracking-widest mb-8">Mejoras de Dron & Sistemas</p>
-            <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="flex-1 flex flex-col items-center justify-start gap-4">
+              {/* Drone Upgrade Panel */}
               <div className="w-full max-w-sm bg-gray-900/80 rounded-2xl p-6 border border-white/10">
                 <div className="flex justify-between items-end mb-4">
                   <div><h3 className="text-lg font-bold text-white font-orbitron">Interceptor MK-{droneLevel + 1}</h3><p className="text-xs text-blue-400 uppercase tracking-widest">Próxima Generación</p></div>
@@ -449,6 +486,148 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-6"><div className="bg-black/40 p-3 rounded-lg border border-white/5 flex flex-col items-center"><span className="text-gray-500 text-[10px] uppercase font-bold mb-1">Velocidad</span><span className="text-green-400 font-bold text-xl">+5%</span></div><div className="bg-black/40 p-3 rounded-lg border border-white/5 flex flex-col items-center"><span className="text-gray-500 text-[10px] uppercase font-bold mb-1">Suerte</span><span className="text-yellow-400 font-bold text-xl">+2%</span></div></div>
                 <button onClick={upgrade} disabled={credits < droneLevel * 250} className={`w-full py-4 rounded-xl font-bold font-orbitron text-lg shadow-lg active:scale-95 transition-all ${credits >= droneLevel*250 ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'}`}>{credits >= droneLevel * 250 ? 'INSTALAR MEJORA' : 'CRÉDITOS INSUFICIENTES'}</button>
+              </div>
+
+              {/* Nozzle Fire Deployable Menu */}
+              <div className="w-full max-w-sm bg-gray-900/80 rounded-2xl border border-white/10 overflow-hidden">
+                {/* Header - Clickable to toggle */}
+                <button 
+                  onClick={() => setNozzleMenuOpen(!nozzleMenuOpen)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🔥</span>
+                    <div className="text-left">
+                      <h3 className="text-lg font-bold text-white font-orbitron">NOZZLE FIRE</h3>
+                      <p className="text-xs text-orange-400 uppercase tracking-widest">Animación de Escape</p>
+                    </div>
+                  </div>
+                  <span className={`text-xl text-gray-400 transition-transform duration-300 ${nozzleMenuOpen ? 'rotate-90' : ''}`}>
+                    ▶
+                  </span>
+                </button>
+
+                {/* Expandable Content */}
+                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${nozzleMenuOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="p-4 pt-0 space-y-3">
+                    {NOZZLE_FIRES.map((nozzle) => {
+                      const isUnlocked = unlockedNozzleFires.includes(nozzle.id);
+                      const isSelected = selectedNozzleFire === nozzle.id;
+                      const canAfford = credits >= nozzle.cost;
+                      
+                      return (
+                        <div 
+                          key={nozzle.id}
+                          className={`rounded-xl border p-4 transition-all ${
+                            isSelected 
+                              ? 'border-orange-500 bg-orange-500/10' 
+                              : isUnlocked 
+                                ? 'border-white/20 bg-black/40 hover:border-white/40 cursor-pointer' 
+                                : 'border-white/10 bg-black/20'
+                          }`}
+                          onClick={() => isUnlocked && selectNozzleFire(nozzle.id)}
+                        >
+                          {/* Fire Animation Preview - Particle-based like mission */}
+                          <div className="relative h-16 bg-gradient-to-r from-black/80 via-black/60 to-black/40 rounded-lg mb-3 overflow-hidden border border-white/5">
+                            {/* Nozzle indicator on left */}
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-6 bg-gray-700 rounded-r-sm border-r border-gray-500" />
+                            
+                            {/* Particle container - cycles between idle and boost */}
+                            <div className="absolute inset-0 nozzle-fire-container">
+                              {/* Core particles (white/bright center) - multiple with staggered animations */}
+                              {[0, 1, 2, 3, 4].map((i) => (
+                                <div
+                                  key={`core-${i}`}
+                                  className="nozzle-particle nozzle-particle-core"
+                                  style={{
+                                    '--particle-color': nozzle.colors[2],
+                                    '--particle-glow': nozzle.colors[1],
+                                    '--delay': `${i * 0.15}s`,
+                                    '--y-offset': `${(i % 3 - 1) * 4}px`,
+                                  }}
+                                />
+                              ))}
+                              
+                              {/* Mid particles (mid color) */}
+                              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                                <div
+                                  key={`mid-${i}`}
+                                  className="nozzle-particle nozzle-particle-mid"
+                                  style={{
+                                    '--particle-color': nozzle.colors[1],
+                                    '--particle-glow': nozzle.colors[0],
+                                    '--delay': `${i * 0.12}s`,
+                                    '--y-offset': `${(i % 5 - 2) * 5}px`,
+                                  }}
+                                />
+                              ))}
+                              
+                              {/* Outer particles (outer color - sparks) */}
+                              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                                <div
+                                  key={`outer-${i}`}
+                                  className="nozzle-particle nozzle-particle-outer"
+                                  style={{
+                                    '--particle-color': nozzle.colors[0],
+                                    '--particle-glow': nozzle.colors[0],
+                                    '--delay': `${i * 0.1}s`,
+                                    '--y-offset': `${(i % 7 - 3) * 6}px`,
+                                  }}
+                                />
+                              ))}
+                              
+                              {/* Glow effect behind particles */}
+                              <div 
+                                className="nozzle-glow"
+                                style={{
+                                  '--glow-color-1': nozzle.colors[2],
+                                  '--glow-color-2': nozzle.colors[1],
+                                  '--glow-color-3': nozzle.colors[0],
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Info Row */}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-bold text-white">{nozzle.name}</h4>
+                              <p className="text-xs text-gray-500">{nozzle.description}</p>
+                            </div>
+                            <div>
+                              {isSelected ? (
+                                <span className="text-xs font-bold text-orange-400 uppercase px-3 py-1 bg-orange-500/20 rounded-full">
+                                  Activo
+                                </span>
+                              ) : isUnlocked ? (
+                                <span className="text-xs font-bold text-green-400 uppercase px-3 py-1 bg-green-500/20 rounded-full">
+                                  Seleccionar
+                                </span>
+                              ) : nozzle.cost === 0 ? (
+                                <span className="text-xs font-bold text-gray-400 uppercase">Gratis</span>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    unlockNozzleFire(nozzle.id);
+                                  }}
+                                  disabled={!canAfford}
+                                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                                    canAfford 
+                                      ? 'bg-orange-600 hover:bg-orange-500 text-white' 
+                                      : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                  }`}
+                                >
+                                  {nozzle.cost.toLocaleString()} ₡
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

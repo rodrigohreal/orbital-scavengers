@@ -20,7 +20,7 @@ const damp = (current, target, smoothing, dt) => {
   return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-smoothing * dt));
 };
 
-const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spaceshipModel }) => {
+const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spaceshipModel, nozzleFire }) => {
   const mountRef = useRef(null);
   const shipRef = useRef(null);
   const planetRef = useRef(null);
@@ -788,10 +788,14 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
         const spawnRate = landed ? 0.3 : baseSpawnRate;
         const fireIntensity = isMining ? 2.5 : 1.0;
         
-        // Color gradient based on mission state
-        const coreColor = isMining ? 0xffffff : 0xffffaa;
-        const midColor = isMining ? 0x00ccff : 0xffaa00;
-        const outerColor = isMining ? 0x0066ff : 0xff5500;
+        // Get nozzle fire colors from prop (convert hex string to number)
+        const nozzleColors = window.nozzleFireColors || ['#ff6600', '#ffaa00', '#ffffff'];
+        const hexToNumber = (hex) => parseInt(hex.replace('#', ''), 16);
+        
+        // Color gradient based on nozzle fire selection
+        const coreColor = hexToNumber(nozzleColors[2]);
+        const midColor = hexToNumber(nozzleColors[1]);
+        const outerColor = hexToNumber(nozzleColors[0]);
         
         // Spawn multiple particles per frame for denser fire
         const spawnCount = Math.random() < spawnRate ? (isMining ? 3 : 2) : 0;
@@ -872,8 +876,8 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
             state.engineIntensity = damp(state.engineIntensity, targetIntensity, 4.0, dt);
             engineLightRef.current.intensity = state.engineIntensity;
             
-            // Smooth color transition
-            const targetColor = isMining ? 0x00aaff : 0xffaa00;
+            // Smooth color transition - use nozzle fire mid color for engine light
+            const targetColor = midColor;
             const currentColor = new THREE.Color(engineLightRef.current.color);
             const targetColorObj = new THREE.Color(targetColor);
             currentColor.lerp(targetColorObj, 0.05);
@@ -912,6 +916,11 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
     window.totalTime = totalDuration;
     window.currentTime = timeLeft;
   }, [missionState, totalDuration, timeLeft]);
+
+  // Sync nozzle fire colors
+  useEffect(() => {
+    window.nozzleFireColors = nozzleFire?.colors || ['#ff6600', '#ffaa00', '#ffffff'];
+  }, [nozzleFire]);
 
   return <div ref={mountRef} id="canvas-container" className="absolute top-0 left-0 w-full h-full z-0 bg-black" />;
 };
