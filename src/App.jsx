@@ -17,9 +17,19 @@ const SPACESHIPS = [
 ];
 
 const NOZZLE_FIRES = [
-  { id: 0, name: "Fuego Estándar", cost: 0, colors: ['#ff6600', '#ffaa00', '#ffffff'], description: "Fuego naranja clásico" },
-  { id: 1, name: "Plasma Azul", cost: 1000, colors: ['#0066ff', '#00ccff', '#ffffff'], description: "Plasma frío y brillante" },
-  { id: 2, name: "Infierno Púrpura", cost: 2000, colors: ['#9900ff', '#ff00ff', '#ffffff'], description: "Llamas de energía oscura" }
+  // Standard particle animations (color variations)
+  { id: 0, name: "Fuego Estándar", cost: 0, colors: ['#ff6600', '#ffaa00', '#ffffff'], description: "Fuego naranja clásico", type: "standard" },
+  { id: 1, name: "Plasma Azul", cost: 5000, colors: ['#0066ff', '#00ccff', '#ffffff'], description: "Plasma frío y brillante", type: "standard" },
+  { id: 2, name: "Infierno Púrpura", cost: 10000, colors: ['#9900ff', '#ff00ff', '#ffffff'], description: "Llamas de energía oscura", type: "standard" },
+  { id: 3, name: "Neón Verde", cost: 15000, colors: ['#00ff66', '#66ffaa', '#ffffff'], description: "Energía tóxica radiante", type: "standard" },
+  { id: 4, name: "Carmesí Rojo", cost: 20000, colors: ['#ff0044', '#ff4488', '#ffccdd'], description: "Combustión infernal", type: "standard" },
+  
+  // Special particle animations (different effects)
+  { id: 5, name: "Relámpago Eléctrico", cost: 30000, colors: ['#00eeff', '#88ffff', '#ffffff'], description: "Descargas eléctricas caóticas", type: "electric" },
+  { id: 6, name: "Anillos de Plasma", cost: 45000, colors: ['#ff00aa', '#ff66cc', '#ffffff'], description: "Ondas circulares de energía", type: "rings" },
+  { id: 7, name: "Explosión Estelar", cost: 60000, colors: ['#ffdd00', '#ffff66', '#ffffff'], description: "Fragmentos de estrellas", type: "starburst" },
+  { id: 8, name: "Espiral Cósmica", cost: 80000, colors: ['#aa00ff', '#dd66ff', '#ffffff'], description: "Vórtice interdimensional", type: "spiral" },
+  { id: 9, name: "Nova Suprema", cost: 100000, colors: ['#ff3300', '#ffaa00', '#00ffff'], description: "Poder de una supernova", type: "nova" }
 ];
 
 // --- APP PRINCIPAL ---
@@ -64,6 +74,21 @@ export default function App() {
     return saved ? JSON.parse(saved) : [0]; // Nozzle 0 is always unlocked
   });
   const [nozzleMenuOpen, setNozzleMenuOpen] = useState(false);
+  const [rankingMenuOpen, setRankingMenuOpen] = useState(false);
+
+  // Mock ranking data (in production, this would come from Telegram API/backend)
+  const RANKING_DATA = useMemo(() => [
+    { id: 1, username: "Rodrigo", level: 20, rank: 1 },
+    { id: 2, username: "StarPilot_X", level: 18, rank: 2 },
+    { id: 3, username: "CosmicHunter", level: 15, rank: 3 },
+    { id: 4, username: "NebulaDrifter", level: 12, rank: 4 },
+    { id: 5, username: "VoidRunner", level: 10, rank: 5 },
+    { id: 6, username: "AstroNova", level: 8, rank: 6 },
+    { id: 7, username: "GalacticAce", level: 7, rank: 7 },
+    { id: 8, username: "OrbitMaster", level: 5, rank: 8 },
+    { id: 9, username: "StellarWing", level: 4, rank: 9 },
+    { id: 10, username: "SpaceRookie", level: 2, rank: 10 },
+  ], []);
 
   useEffect(() => {
     localStorage.setItem('os_ultra_credits', credits);
@@ -507,13 +532,233 @@ export default function App() {
                   </span>
                 </button>
 
-                {/* Expandable Content */}
-                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${nozzleMenuOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="p-4 pt-0 space-y-3">
+                        {/* Expandable Content */}
+                <div className={`transition-all duration-300 ease-in-out ${nozzleMenuOpen ? 'max-h-[60vh] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                  <div className="p-4 pt-0 pb-8 space-y-3">
                     {NOZZLE_FIRES.map((nozzle) => {
                       const isUnlocked = unlockedNozzleFires.includes(nozzle.id);
                       const isSelected = selectedNozzleFire === nozzle.id;
                       const canAfford = credits >= nozzle.cost;
+                      
+                      // Render different particle systems based on type
+                      const renderParticles = () => {
+                        switch(nozzle.type) {
+                          case 'electric':
+                            return (
+                              <>
+                                {/* Electric bolts - jagged lightning */}
+                                {[0, 1, 2, 3, 4, 5].map((i) => (
+                                  <div
+                                    key={`bolt-${i}`}
+                                    className="nozzle-particle nozzle-particle-electric"
+                                    style={{
+                                      '--particle-color': nozzle.colors[1],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--delay': `${i * 0.18}s`,
+                                      '--y-offset': `${(i % 5 - 2) * 8}px`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Electric sparks */}
+                                {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                                  <div
+                                    key={`spark-${i}`}
+                                    className="nozzle-particle nozzle-particle-spark"
+                                    style={{
+                                      '--particle-color': nozzle.colors[2],
+                                      '--particle-glow': nozzle.colors[1],
+                                      '--delay': `${i * 0.08}s`,
+                                      '--y-offset': `${(i % 7 - 3) * 7}px`,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            );
+                          
+                          case 'rings':
+                            return (
+                              <>
+                                {/* Plasma rings */}
+                                {[0, 1, 2, 3, 4].map((i) => (
+                                  <div
+                                    key={`ring-${i}`}
+                                    className="nozzle-particle nozzle-particle-ring"
+                                    style={{
+                                      '--particle-color': nozzle.colors[1],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--ring-border': nozzle.colors[2],
+                                      '--delay': `${i * 0.3}s`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Ring trails */}
+                                {[0, 1, 2, 3, 4, 5].map((i) => (
+                                  <div
+                                    key={`trail-${i}`}
+                                    className="nozzle-particle nozzle-particle-ring-trail"
+                                    style={{
+                                      '--particle-color': nozzle.colors[0],
+                                      '--delay': `${i * 0.22}s`,
+                                      '--y-offset': `${(i % 3 - 1) * 4}px`,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            );
+                          
+                          case 'starburst':
+                            return (
+                              <>
+                                {/* Star particles */}
+                                {[0, 1, 2, 3, 4, 5].map((i) => (
+                                  <div
+                                    key={`star-${i}`}
+                                    className="nozzle-particle nozzle-particle-star"
+                                    style={{
+                                      '--particle-color': nozzle.colors[1],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--delay': `${i * 0.25}s`,
+                                      '--y-offset': `${(i % 5 - 2) * 6}px`,
+                                      '--rotation': `${i * 60}deg`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Burst fragments */}
+                                {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                                  <div
+                                    key={`fragment-${i}`}
+                                    className="nozzle-particle nozzle-particle-fragment"
+                                    style={{
+                                      '--particle-color': nozzle.colors[2],
+                                      '--particle-glow': nozzle.colors[1],
+                                      '--delay': `${i * 0.12}s`,
+                                      '--y-offset': `${(i % 7 - 3) * 5}px`,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            );
+                          
+                          case 'spiral':
+                            return (
+                              <>
+                                {/* Spiral core - Denser and continuous */}
+                                {Array.from({length: 24}).map((_, i) => (
+                                  <div
+                                    key={`spiral-${i}`}
+                                    className="nozzle-particle nozzle-particle-spiral"
+                                    style={{
+                                      '--particle-color': nozzle.colors[1],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--delay': `${i * 0.1}s`,
+                                      '--spiral-angle': `${i * 20}deg`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Vortex dust */}
+                                {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                                  <div
+                                    key={`vortex-${i}`}
+                                    className="nozzle-particle nozzle-particle-vortex"
+                                    style={{
+                                      '--particle-color': nozzle.colors[2],
+                                      '--particle-glow': nozzle.colors[1],
+                                      '--delay': `${i * 0.14}s`,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            );
+                          
+                          case 'nova':
+                            return (
+                              <>
+                                {/* Nova core */}
+                                {[0, 1, 2].map((i) => (
+                                  <div
+                                    key={`nova-core-${i}`}
+                                    className="nozzle-particle nozzle-particle-nova-core"
+                                    style={{
+                                      '--particle-color': nozzle.colors[2],
+                                      '--particle-glow': nozzle.colors[1],
+                                      '--delay': `${i * 0.4}s`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Nova waves */}
+                                {[0, 1, 2, 3, 4].map((i) => (
+                                  <div
+                                    key={`nova-wave-${i}`}
+                                    className="nozzle-particle nozzle-particle-nova-wave"
+                                    style={{
+                                      '--particle-color': nozzle.colors[0],
+                                      '--particle-glow': nozzle.colors[1],
+                                      '--delay': `${i * 0.28}s`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Nova debris */}
+                                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                                  <div
+                                    key={`debris-${i}`}
+                                    className="nozzle-particle nozzle-particle-debris"
+                                    style={{
+                                      '--particle-color': nozzle.colors[1],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--delay': `${i * 0.11}s`,
+                                      '--y-offset': `${(i % 5 - 2) * 7}px`,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            );
+                          
+                          default: // standard
+                            return (
+                              <>
+                                {/* Core particles */}
+                                {[0, 1, 2, 3, 4].map((i) => (
+                                  <div
+                                    key={`core-${i}`}
+                                    className="nozzle-particle nozzle-particle-core"
+                                    style={{
+                                      '--particle-color': nozzle.colors[2],
+                                      '--particle-glow': nozzle.colors[1],
+                                      '--delay': `${i * 0.15}s`,
+                                      '--y-offset': `${(i % 3 - 1) * 4}px`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Mid particles */}
+                                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                                  <div
+                                    key={`mid-${i}`}
+                                    className="nozzle-particle nozzle-particle-mid"
+                                    style={{
+                                      '--particle-color': nozzle.colors[1],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--delay': `${i * 0.12}s`,
+                                      '--y-offset': `${(i % 5 - 2) * 5}px`,
+                                    }}
+                                  />
+                                ))}
+                                {/* Outer particles */}
+                                {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                                  <div
+                                    key={`outer-${i}`}
+                                    className="nozzle-particle nozzle-particle-outer"
+                                    style={{
+                                      '--particle-color': nozzle.colors[0],
+                                      '--particle-glow': nozzle.colors[0],
+                                      '--delay': `${i * 0.1}s`,
+                                      '--y-offset': `${(i % 7 - 3) * 6}px`,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            );
+                        }
+                      };
                       
                       return (
                         <div 
@@ -532,53 +777,13 @@ export default function App() {
                             {/* Nozzle indicator on left */}
                             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-6 bg-gray-700 rounded-r-sm border-r border-gray-500" />
                             
-                            {/* Particle container - cycles between idle and boost */}
+                            {/* Particle container - render based on type */}
                             <div className="absolute inset-0 nozzle-fire-container">
-                              {/* Core particles (white/bright center) - multiple with staggered animations */}
-                              {[0, 1, 2, 3, 4].map((i) => (
-                                <div
-                                  key={`core-${i}`}
-                                  className="nozzle-particle nozzle-particle-core"
-                                  style={{
-                                    '--particle-color': nozzle.colors[2],
-                                    '--particle-glow': nozzle.colors[1],
-                                    '--delay': `${i * 0.15}s`,
-                                    '--y-offset': `${(i % 3 - 1) * 4}px`,
-                                  }}
-                                />
-                              ))}
-                              
-                              {/* Mid particles (mid color) */}
-                              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                                <div
-                                  key={`mid-${i}`}
-                                  className="nozzle-particle nozzle-particle-mid"
-                                  style={{
-                                    '--particle-color': nozzle.colors[1],
-                                    '--particle-glow': nozzle.colors[0],
-                                    '--delay': `${i * 0.12}s`,
-                                    '--y-offset': `${(i % 5 - 2) * 5}px`,
-                                  }}
-                                />
-                              ))}
-                              
-                              {/* Outer particles (outer color - sparks) */}
-                              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-                                <div
-                                  key={`outer-${i}`}
-                                  className="nozzle-particle nozzle-particle-outer"
-                                  style={{
-                                    '--particle-color': nozzle.colors[0],
-                                    '--particle-glow': nozzle.colors[0],
-                                    '--delay': `${i * 0.1}s`,
-                                    '--y-offset': `${(i % 7 - 3) * 6}px`,
-                                  }}
-                                />
-                              ))}
+                              {renderParticles()}
                               
                               {/* Glow effect behind particles */}
                               <div 
-                                className="nozzle-glow"
+                                className={`nozzle-glow ${nozzle.type !== 'standard' ? `nozzle-glow-${nozzle.type}` : ''}`}
                                 style={{
                                   '--glow-color-1': nozzle.colors[2],
                                   '--glow-color-2': nozzle.colors[1],
@@ -626,6 +831,96 @@ export default function App() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Ranking Deployable Menu */}
+              <div className="w-full max-w-sm bg-gray-900/80 rounded-2xl border border-white/10 overflow-hidden">
+                {/* Header - Clickable to toggle */}
+                <button 
+                  onClick={() => setRankingMenuOpen(!rankingMenuOpen)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🏆</span>
+                    <div className="text-left">
+                      <h3 className="text-lg font-bold text-white font-orbitron">RANKING</h3>
+                      <p className="text-xs text-yellow-400 uppercase tracking-widest">Pilotos Galácticos</p>
+                    </div>
+                  </div>
+                  <span className={`text-xl text-gray-400 transition-transform duration-300 ${rankingMenuOpen ? 'rotate-90' : ''}`}>
+                    ▶
+                  </span>
+                </button>
+
+                {/* Expandable Content */}
+                <div className={`transition-all duration-300 ease-in-out ${rankingMenuOpen ? 'max-h-[60vh] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                  <div className="p-4 pt-0 pb-8 space-y-2">
+                    {RANKING_DATA.map((user) => {
+                      const isTopThree = user.rank <= 3;
+                      const rankColors = {
+                        1: 'from-yellow-500 to-amber-600 border-yellow-400',
+                        2: 'from-gray-400 to-gray-500 border-gray-300',
+                        3: 'from-amber-700 to-amber-800 border-amber-600',
+                      };
+                      const rankEmojis = { 1: '🥇', 2: '🥈', 3: '🥉' };
+                      
+                      return (
+                        <div 
+                          key={user.id}
+                          className={`rounded-xl border p-3 transition-all flex items-center gap-3 ${
+                            isTopThree 
+                              ? `bg-gradient-to-r ${rankColors[user.rank]} border-opacity-50` 
+                              : 'border-white/10 bg-black/40 hover:border-white/20'
+                          }`}
+                        >
+                          {/* Rank Badge */}
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                            isTopThree 
+                              ? 'bg-black/30 text-white' 
+                              : 'bg-gray-800 text-gray-400'
+                          }`}>
+                            {isTopThree ? rankEmojis[user.rank] : `#${user.rank}`}
+                          </div>
+                          
+                          {/* User Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-bold truncate ${isTopThree ? 'text-white' : 'text-gray-300'}`}>
+                              @{user.username}
+                            </div>
+                            <div className={`text-xs ${isTopThree ? 'text-white/70' : 'text-gray-500'}`}>
+                              Piloto Estelar
+                            </div>
+                          </div>
+                          
+                          {/* Level Badge */}
+                          <div className={`px-3 py-1.5 rounded-lg font-mono font-bold text-sm ${
+                            isTopThree 
+                              ? 'bg-black/30 text-white border border-white/20' 
+                              : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          }`}>
+                            MK-{user.level}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Current User Position Indicator */}
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <div className="rounded-xl border-2 border-cyan-500/50 bg-cyan-500/10 p-3 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-cyan-500/30 flex items-center justify-center">
+                          <span className="text-cyan-400 font-bold">TÚ</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-bold text-cyan-300">Tu Posición</div>
+                          <div className="text-xs text-cyan-500/70">Sigue mejorando tu nave</div>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg font-mono font-bold text-sm bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                          MK-{droneLevel}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

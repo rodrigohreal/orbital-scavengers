@@ -14,6 +14,7 @@ const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2,
 const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
 const easeInOutQuad = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 const smoothStep = (t) => t * t * (3 - 2 * t);
+const smootherStep = (t) => t * t * t * (t * (t * 6 - 15) + 10); // Even smoother (quintic)
 
 // Smooth damping function (frame-rate independent)
 const damp = (current, target, smoothing, dt) => {
@@ -38,12 +39,23 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
     shipVelocity: new THREE.Vector3(0, 0, 0),
     cameraPos: new THREE.Vector3(0, 3, 12),
     cameraTarget: new THREE.Vector3(0, 0, 0),
+    cameraPosVelocity: new THREE.Vector3(0, 0, 0), // For momentum-based smoothing
+    cameraTargetVelocity: new THREE.Vector3(0, 0, 0),
     engineIntensity: 0,
     prevProgress: 0,
     // For smooth time tracking (independent of 1-second timer steps)
     missionStartTime: 0,
     isMissionActive: false,
-    smoothProgress: 0
+    smoothProgress: 0,
+    // Transition states for beginning/end smoothness
+    transitionPhase: 'idle', // 'idle', 'starting', 'active', 'ending'
+    transitionProgress: 0,
+    lastPhase: -1, // Track phase changes to smooth transitions
+    // Mission end camera transition - for smooth cinematic ending
+    endingCameraStartPos: new THREE.Vector3(0, 3, 12),
+    endingCameraStartTarget: new THREE.Vector3(0, 0, 0),
+    endingProgress: 0, // 0 to 1 animation progress for ending sequence
+    frozenProgress: 0 // Freeze mission progress when ending starts
   });
   
   // Variables para suavizar animaciones
@@ -362,11 +374,50 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
     }
     shootingStarsRef.current = shootingStarsPool;
 
-    // 7. PARTICULAS (Fuego Motor) - Enhanced particle system
-    // Multiple particle layers for richer fire effect
+    // 7. PARTICULAS (Fuego Motor) - Enhanced particle system with type-specific effects
+    // Standard particle geometries
     const pGeoCore = new THREE.SphereGeometry(0.15, 6, 6);
     const pGeoOuter = new THREE.SphereGeometry(0.25, 4, 4);
     const pGeoSpark = new THREE.SphereGeometry(0.08, 4, 4);
+    
+    // Special effect geometries
+    const pGeoRing = new THREE.TorusGeometry(0.5, 0.025, 12, 48); // Plasma rings - larger, thinner, smoother
+    const pGeoRingTrail = new THREE.SphereGeometry(0.08, 6, 6); // Ring trail dots - slightly larger
+    const pGeoBolt = new THREE.BoxGeometry(0.4, 0.03, 0.03); // Electric bolts
+    
+    // Create a proper 5-pointed star shape for starburst particles
+    const createStarGeometry = (outerRadius = 0.2, innerRadius = 0.08, points = 5, depth = 0.06) => {
+      const starShape = new THREE.Shape();
+      const angleStep = (Math.PI * 2) / points;
+      const halfAngle = angleStep / 2;
+      
+      for (let i = 0; i < points; i++) {
+        const outerAngle = i * angleStep - Math.PI / 2; // Start from top
+        const innerAngle = outerAngle + halfAngle;
+        
+        const outerX = Math.cos(outerAngle) * outerRadius;
+        const outerY = Math.sin(outerAngle) * outerRadius;
+        const innerX = Math.cos(innerAngle) * innerRadius;
+        const innerY = Math.sin(innerAngle) * innerRadius;
+        
+        if (i === 0) {
+          starShape.moveTo(outerX, outerY);
+        } else {
+          starShape.lineTo(outerX, outerY);
+        }
+        starShape.lineTo(innerX, innerY);
+      }
+      starShape.closePath();
+      
+      // Extrude the star shape to give it depth
+      const extrudeSettings = { depth, bevelEnabled: false };
+      return new THREE.ExtrudeGeometry(starShape, extrudeSettings);
+    };
+    
+    const pGeoStar = createStarGeometry(0.18, 0.07, 5, 0.05); // 5-pointed star
+    const pGeoFragment = new THREE.BoxGeometry(0.15, 0.03, 0.03); // Star fragments
+    const pGeoSpiral = new THREE.ConeGeometry(0.08, 0.2, 4); // Spiral particles
+    const pGeoNova = new THREE.IcosahedronGeometry(0.2, 0); // Nova burst particles
     
     const createFireMaterial = (color, opacity = 0.9) => new THREE.MeshBasicMaterial({ 
         color, 
@@ -376,10 +427,12 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
         depthWrite: false
     });
 
-    // Pool de partículas - increased for smoother fire
+    // Pool de partículas - standard particles for all types
     particles.current = [];
-    for(let i=0; i<150; i++) {
-        const type = i < 50 ? 'core' : (i < 100 ? 'outer' : 'spark');
+    
+    // Standard fire particles (core, outer, spark) - 100 particles
+    for(let i=0; i<100; i++) {
+        const type = i < 35 ? 'core' : (i < 70 ? 'outer' : 'spark');
         const geo = type === 'core' ? pGeoCore : (type === 'outer' ? pGeoOuter : pGeoSpark);
         const color = type === 'core' ? 0xffffff : (type === 'outer' ? 0xffaa00 : 0xff5500);
         const m = new THREE.Mesh(geo, createFireMaterial(color, type === 'core' ? 1.0 : 0.8));
@@ -391,7 +444,107 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
             maxLife: 1,
             velocity: new THREE.Vector3(),
             type,
+            effectType: 'standard',
             baseScale: type === 'core' ? 0.8 : (type === 'outer' ? 1.2 : 0.5)
+        });
+    }
+    
+    // Ring particles (expanding plasma rings) - 40 particles for dense effect
+    for(let i=0; i<40; i++) {
+        const type = i < 20 ? 'ring' : 'ringTrail';
+        const geo = type === 'ring' ? pGeoRing : pGeoRingTrail;
+        // Use vibrant pink color for initial material
+        const m = new THREE.Mesh(geo, createFireMaterial(0xff00aa, 0.95));
+        m.visible = false;
+        if(type === 'ring') m.rotation.x = Math.PI / 2; // Face the direction of travel
+        scene.add(m);
+        particles.current.push({ 
+            mesh: m, 
+            life: 0, 
+            maxLife: 1.8,
+            velocity: new THREE.Vector3(),
+            type,
+            effectType: 'rings',
+            baseScale: type === 'ring' ? 1.0 : 1.0,
+            startScale: 0.15,
+            endScale: 3.5
+        });
+    }
+    
+    // Electric particles (lightning bolts) - 30 particles
+    for(let i=0; i<30; i++) {
+        const type = i < 15 ? 'bolt' : 'electricSpark';
+        const geo = type === 'bolt' ? pGeoBolt : pGeoSpark;
+        const m = new THREE.Mesh(geo, createFireMaterial(0x00eeff, 0.95));
+        m.visible = false;
+        scene.add(m);
+        particles.current.push({ 
+            mesh: m, 
+            life: 0, 
+            maxLife: 0.4,
+            velocity: new THREE.Vector3(),
+            type,
+            effectType: 'electric',
+            baseScale: type === 'bolt' ? 1.5 : 0.6,
+            jitterOffset: new THREE.Vector3()
+        });
+    }
+    
+    // Starburst particles - 40 particles for better effect
+    for(let i=0; i<40; i++) {
+        const type = i < 20 ? 'star' : 'fragment';
+        const geo = type === 'star' ? pGeoStar : pGeoFragment;
+        const m = new THREE.Mesh(geo, createFireMaterial(0xffdd00, 0.95));
+        m.visible = false;
+        scene.add(m);
+        particles.current.push({ 
+            mesh: m, 
+            life: 0, 
+            maxLife: type === 'star' ? 1.5 : 1.0, // Stars live longer
+            velocity: new THREE.Vector3(),
+            type,
+            effectType: 'starburst',
+            baseScale: type === 'star' ? 1.2 : 0.6,
+            spinSpeed: (Math.random() - 0.5) * 15
+        });
+    }
+    
+    // Spiral particles - 60 particles for continuous trail effect
+    for(let i=0; i<60; i++) {
+        const mat = createFireMaterial(0xaa00ff, 0.85).clone();
+        mat.blending = THREE.NormalBlending; // Use NormalBlending to avoid white blowout, keep it purple
+        const m = new THREE.Mesh(pGeoSpiral, mat);
+        m.visible = false;
+        scene.add(m);
+        particles.current.push({ 
+            mesh: m, 
+            life: 0, 
+            maxLife: 1.2,
+            velocity: new THREE.Vector3(),
+            type: 'spiral',
+            effectType: 'spiral',
+            baseScale: 0.8,
+            angle: (i / 60) * Math.PI * 2,
+            spiralRadius: 0
+        });
+    }
+    
+    // Nova particles - 25 particles
+    for(let i=0; i<25; i++) {
+        const type = i < 10 ? 'novaCore' : 'novaBurst';
+        const geo = type === 'novaCore' ? pGeoNova : pGeoOuter;
+        const m = new THREE.Mesh(geo, createFireMaterial(0xff3300, 0.9));
+        m.visible = false;
+        scene.add(m);
+        particles.current.push({ 
+            mesh: m, 
+            life: 0, 
+            maxLife: 0.8,
+            velocity: new THREE.Vector3(),
+            type,
+            effectType: 'nova',
+            baseScale: type === 'novaCore' ? 1.2 : 0.8,
+            burstAngle: (i / 25) * Math.PI * 2
         });
     }
 
@@ -424,27 +577,64 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
         let progress = 0;
         
         if (isMining) {
-            // Detect mission start
+            // Detect mission start - smooth ramp-up
             if (!state.isMissionActive) {
                 state.isMissionActive = true;
                 state.missionStartTime = performance.now();
-                state.smoothProgress = 0;
+                state.transitionPhase = 'starting';
+                state.transitionProgress = 0;
+                // Don't reset smoothProgress immediately - let it blend from current value
+            }
+            
+            // Smooth transition into mission
+            if (state.transitionPhase === 'starting') {
+                state.transitionProgress = Math.min(state.transitionProgress + dt * 2.0, 1.0);
+                if (state.transitionProgress >= 1.0) {
+                    state.transitionPhase = 'active';
+                }
             }
             
             // Calculate smooth progress based on elapsed time
             const elapsedMs = performance.now() - state.missionStartTime;
             const elapsedSeconds = elapsedMs / 1000;
-            const rawProgress = Math.min(elapsedSeconds / duration, 0.999); // Cap just below 1
+            const rawProgress = Math.min(elapsedSeconds / duration, 0.995); // Cap just below 1
             
-            // Ultra-smooth interpolation to target progress
-            state.smoothProgress = damp(state.smoothProgress, rawProgress, 6.0, dt);
+            // Ultra-smooth interpolation to target progress with variable smoothing
+            // Slower smoothing at start/end for buttery transitions
+            const progressSmoothing = state.transitionPhase === 'starting' ? 3.0 : 8.0;
+            state.smoothProgress = damp(state.smoothProgress, rawProgress, progressSmoothing, dt);
             progress = state.smoothProgress;
         } else {
             // Mission ended or idle
             if (state.isMissionActive) {
                 state.isMissionActive = false;
-                // Smoothly finish to 1.0 if mission just ended
-                state.smoothProgress = damp(state.smoothProgress, 0, 3.0, dt);
+                state.transitionPhase = 'ending';
+                state.transitionProgress = 0;
+                state.endingProgress = 0;
+                // Capture current camera state for smooth transition
+                state.endingCameraStartPos.copy(state.cameraPos);
+                state.endingCameraStartTarget.copy(state.cameraTarget);
+                // Freeze the progress value at the moment of ending
+                state.frozenProgress = state.smoothProgress;
+            }
+            
+            // Smooth transition out of mission
+            if (state.transitionPhase === 'ending') {
+                // Slower transition for cinematic feel (takes ~2.5 seconds)
+                state.transitionProgress = Math.min(state.transitionProgress + dt * 0.4, 1.0);
+                state.endingProgress = Math.min(state.endingProgress + dt * 0.5, 1.0);
+                
+                // Use quintic easing for ultra-smooth ending
+                const endingEase = smootherStep(state.transitionProgress);
+                // Slowly decay the frozen progress for ship animation
+                state.smoothProgress = THREE.MathUtils.lerp(state.frozenProgress, 0, endingEase);
+                
+                if (state.transitionProgress >= 1.0 && state.endingProgress >= 1.0) {
+                    state.transitionPhase = 'idle';
+                    state.smoothProgress = 0;
+                }
+            } else if (state.transitionPhase === 'idle') {
+                state.smoothProgress = damp(state.smoothProgress, 0, 2.0, dt);
             }
             progress = state.smoothProgress;
         }
@@ -515,10 +705,15 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
                     targetRotZ = Math.sin(time * 1.0) * 0.04 * (1 - phaseP);
                 }
 
+                // Adaptive smoothing based on transition phase
+                const isTransitioning = state.transitionPhase === 'starting' || state.transitionPhase === 'ending';
+                const adaptivePosSmooth = isTransitioning ? posSmooth * 0.6 : posSmooth;
+                const adaptiveRotSmooth = isTransitioning ? rotSmooth * 0.6 : rotSmooth;
+                
                 // Ultra-smooth position interpolation using damping
-                state.shipPos.x = damp(state.shipPos.x, targetX, posSmooth, dt);
-                state.shipPos.y = damp(state.shipPos.y, targetY, posSmooth, dt);
-                state.shipPos.z = damp(state.shipPos.z, targetZ, posSmooth, dt);
+                state.shipPos.x = damp(state.shipPos.x, targetX, adaptivePosSmooth, dt);
+                state.shipPos.y = damp(state.shipPos.y, targetY, adaptivePosSmooth, dt);
+                state.shipPos.z = damp(state.shipPos.z, targetZ, adaptivePosSmooth, dt);
                 
                 shipRef.current.position.copy(state.shipPos);
                 
@@ -529,27 +724,46 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
                 while(deltaRotY > Math.PI) deltaRotY -= Math.PI * 2;
                 while(deltaRotY < -Math.PI) deltaRotY += Math.PI * 2;
                 
-                state.shipRot.y = damp(currentRotY, currentRotY + deltaRotY, rotSmooth, dt);
-                state.shipRot.z = damp(state.shipRot.z, targetRotZ, rotSmooth, dt);
-                state.shipRot.x = damp(state.shipRot.x, targetRotX, rotSmooth, dt);
+                state.shipRot.y = damp(currentRotY, currentRotY + deltaRotY, adaptiveRotSmooth, dt);
+                state.shipRot.z = damp(state.shipRot.z, targetRotZ, adaptiveRotSmooth, dt);
+                state.shipRot.x = damp(state.shipRot.x, targetRotX, adaptiveRotSmooth, dt);
                 
                 shipRef.current.rotation.y = state.shipRot.y;
                 shipRef.current.rotation.z = state.shipRot.z;
                 shipRef.current.rotation.x = state.shipRot.x;
 
             } else {
-                // IDLE: Smooth exhibition rotation
-                state.shipRot.y += 0.008 * dtScale;
+                // IDLE or ENDING: Smooth exhibition rotation
+                // Adaptive smoothing - much slower during mission-end transition for cinematic feel
+                const isEndingTransition = state.transitionPhase === 'ending';
+                const endingEase = isEndingTransition ? smootherStep(state.endingProgress) : 1.0;
+                
+                // During ending: start very slow, gradually speed up to normal idle speed
+                const idleSmooth = isEndingTransition ? 0.8 + endingEase * 2.2 : 3.0;
+                const rotSpeed = isEndingTransition ? 0.002 + endingEase * 0.006 : 0.008;
+                
+                state.shipRot.y += rotSpeed * dtScale;
                 
                 // Smooth floating motion with multiple frequencies
                 const floatY = Math.sin(time * 1.5) * 0.4 + Math.sin(time * 2.3) * 0.15;
                 const floatX = Math.sin(time * 1.1) * 0.1;
                 
-                state.shipPos.y = damp(state.shipPos.y, floatY, 3.0, dt);
-                state.shipPos.z = damp(state.shipPos.z, 0, 2.0, dt);
-                state.shipPos.x = damp(state.shipPos.x, floatX, 3.0, dt);
-                state.shipRot.z = damp(state.shipRot.z, Math.sin(time * 0.8) * 0.05, 2.0, dt);
-                state.shipRot.x = damp(state.shipRot.x, Math.sin(time * 1.2) * 0.03, 2.0, dt);
+                // During ending transition, gradually blend toward idle float position
+                // This prevents sudden jumps when transitioning from mission position
+                const targetFloatY = floatY;
+                const targetFloatX = floatX;
+                const targetZ = 0;
+                
+                // Use slower damping during ending for buttery smooth transition
+                const posSmoothing = isEndingTransition ? idleSmooth * 0.5 : idleSmooth;
+                state.shipPos.y = damp(state.shipPos.y, targetFloatY, posSmoothing, dt);
+                state.shipPos.z = damp(state.shipPos.z, targetZ, posSmoothing * 0.5, dt);
+                state.shipPos.x = damp(state.shipPos.x, targetFloatX, posSmoothing, dt);
+                
+                // Smooth rotation blending during ending
+                const rotSmoothing = isEndingTransition ? idleSmooth * 0.6 : idleSmooth * 0.7;
+                state.shipRot.z = damp(state.shipRot.z, Math.sin(time * 0.8) * 0.05, rotSmoothing, dt);
+                state.shipRot.x = damp(state.shipRot.x, Math.sin(time * 1.2) * 0.03, rotSmoothing, dt);
                 
                 shipRef.current.position.copy(state.shipPos);
                 shipRef.current.rotation.y = state.shipRot.y;
@@ -558,91 +772,166 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
             }
         }
 
-        // -- CÁMARA (ULTRA SMOOTH) --
+        // -- CÁMARA (ULTRA SMOOTH with phase blending) --
         if (cameraRef.current) {
-            const camSmooth = 2.5;
+            // Adaptive smoothing - slower during transitions for buttery feel
+            const isTransitioning = state.transitionPhase === 'starting' || state.transitionPhase === 'ending';
+            const baseCamSmooth = isTransitioning ? 1.5 : 2.5;
+            
+            // Calculate target camera for each phase (we'll blend between them)
+            const calcPhaseCamera = (phase, shipZ, shipY) => {
+                switch(phase) {
+                    case 0: // Outbound travel
+                        return {
+                            pos: new THREE.Vector3(
+                                20 + Math.sin(time * 0.3) * 2,
+                                12 + Math.sin(time * 0.5) * 1.5,
+                                shipZ + 35
+                            ),
+                            target: new THREE.Vector3(0, shipY, shipZ - 20)
+                        };
+                    case 1: // Orbital/mining view
+                        return {
+                            pos: new THREE.Vector3(
+                                30 + Math.sin(time * 0.4) * 2,
+                                20 + Math.sin(time * 0.6) * 1.5,
+                                -170
+                            ),
+                            target: new THREE.Vector3(0, 8, -220)
+                        };
+                    case 2: // Takeoff/turn
+                        return {
+                            pos: new THREE.Vector3(25, 30, -100),
+                            target: new THREE.Vector3(0, shipY, shipZ)
+                        };
+                    case 3: // Return journey
+                        return {
+                            pos: new THREE.Vector3(
+                                -20 - Math.sin(time * 0.3) * 2,
+                                10 + Math.sin(time * 0.5) * 1.5,
+                                shipZ - 35
+                            ),
+                            target: new THREE.Vector3(0, shipY, shipZ + 20)
+                        };
+                    default: // Idle
+                        return {
+                            pos: new THREE.Vector3(
+                                Math.sin(time * 0.2) * 2,
+                                3 + Math.sin(time * 0.3) * 0.5,
+                                12 + Math.sin(time * 0.25) * 1
+                            ),
+                            target: new THREE.Vector3(shipY * 0.1, shipY * 0.5, -5)
+                        };
+                }
+            };
+            
+            let targetCamPos;
+            let targetLookAt;
+            let camSmooth = baseCamSmooth;
             
             if (isMining) {
-                // Dynamic camera that follows the action smoothly
-                let targetCamPos;
-                let targetLookAt;
+                const shipZ = state.shipPos.z;
+                const shipY = state.shipPos.y;
                 
-                if(progress < 0.35) {
-                    // Follow from side during outbound travel
-                    const shipZ = state.shipPos.z;
-                    const followDist = 35;
-                    targetCamPos = new THREE.Vector3(
-                        20 + Math.sin(time * 0.3) * 2,
-                        12 + Math.sin(time * 0.5) * 1.5,
-                        shipZ + followDist
-                    );
-                    targetLookAt = new THREE.Vector3(0, state.shipPos.y, shipZ - 20);
-                } else if(progress < 0.55) {
-                    // Closer orbital view during landing/mining
-                    targetCamPos = new THREE.Vector3(
-                        30 + Math.sin(time * 0.4) * 2,
-                        20 + Math.sin(time * 0.6) * 1.5,
-                        -170
-                    );
-                    targetLookAt = new THREE.Vector3(0, 8, -220);
-                } else if(progress < 0.7) {
-                    // Pull out for takeoff and turn
-                    const phaseP = (progress - 0.55) / 0.15;
-                    targetCamPos = new THREE.Vector3(
-                        35 - phaseP * 10,
-                        25 + phaseP * 5,
-                        -150 + phaseP * 50
-                    );
-                    targetLookAt = new THREE.Vector3(0, state.shipPos.y, state.shipPos.z);
+                // Determine current phase with smooth blending zones
+                // Phase boundaries with overlap for blending
+                const phase0End = 0.33;   // Outbound ends
+                const phase1Start = 0.30; // Orbital starts (overlap for blend)
+                const phase1End = 0.57;   // Orbital ends
+                const phase2Start = 0.54; // Takeoff starts (overlap)
+                const phase2End = 0.72;   // Takeoff ends
+                const phase3Start = 0.68; // Return starts (overlap)
+                
+                // Calculate blended camera positions
+                if (progress < phase1Start) {
+                    // Pure outbound
+                    const cam = calcPhaseCamera(0, shipZ, shipY);
+                    targetCamPos = cam.pos;
+                    targetLookAt = cam.target;
+                } else if (progress < phase0End) {
+                    // Blend outbound -> orbital
+                    const t = smootherStep((progress - phase1Start) / (phase0End - phase1Start));
+                    const cam0 = calcPhaseCamera(0, shipZ, shipY);
+                    const cam1 = calcPhaseCamera(1, shipZ, shipY);
+                    targetCamPos = cam0.pos.clone().lerp(cam1.pos, t);
+                    targetLookAt = cam0.target.clone().lerp(cam1.target, t);
+                    camSmooth = baseCamSmooth * 0.7; // Slower during blend
+                } else if (progress < phase2Start) {
+                    // Pure orbital
+                    const cam = calcPhaseCamera(1, shipZ, shipY);
+                    targetCamPos = cam.pos;
+                    targetLookAt = cam.target;
+                } else if (progress < phase1End) {
+                    // Blend orbital -> takeoff
+                    const t = smootherStep((progress - phase2Start) / (phase1End - phase2Start));
+                    const cam1 = calcPhaseCamera(1, shipZ, shipY);
+                    const cam2 = calcPhaseCamera(2, shipZ, shipY);
+                    targetCamPos = cam1.pos.clone().lerp(cam2.pos, t);
+                    targetLookAt = cam1.target.clone().lerp(cam2.target, t);
+                    camSmooth = baseCamSmooth * 0.7;
+                } else if (progress < phase3Start) {
+                    // Pure takeoff with internal interpolation
+                    const phaseP = smoothStep((progress - phase1End) / (phase3Start - phase1End));
+                    const cam2 = calcPhaseCamera(2, shipZ, shipY);
+                    targetCamPos = cam2.pos.clone();
+                    targetCamPos.z = THREE.MathUtils.lerp(-100, -50, phaseP);
+                    targetLookAt = cam2.target;
+                } else if (progress < phase2End) {
+                    // Blend takeoff -> return
+                    const t = smootherStep((progress - phase3Start) / (phase2End - phase3Start));
+                    const cam2 = calcPhaseCamera(2, shipZ, shipY);
+                    const cam3 = calcPhaseCamera(3, shipZ, shipY);
+                    cam2.pos.z = -50; // Use end position of takeoff phase
+                    targetCamPos = cam2.pos.clone().lerp(cam3.pos, t);
+                    targetLookAt = cam2.target.clone().lerp(cam3.target, t);
+                    camSmooth = baseCamSmooth * 0.7;
                 } else {
-                    // Follow from side during return journey
-                    const shipZ = state.shipPos.z;
-                    const returnP = (progress - 0.7) / 0.3;
-                    targetCamPos = new THREE.Vector3(
-                        -20 - Math.sin(time * 0.3) * 2,
-                        12 + Math.sin(time * 0.5) * 1.5 - returnP * 5,
-                        shipZ - 35
-                    );
-                    targetLookAt = new THREE.Vector3(0, state.shipPos.y, shipZ + 20);
+                    // Return journey - approaching home
+                    const cam3 = calcPhaseCamera(3, state.shipPos.z, state.shipPos.y);
+                    targetCamPos = cam3.pos;
+                    targetLookAt = cam3.target;
                 }
                 
-                // Smooth camera position
-                state.cameraPos.x = damp(state.cameraPos.x, targetCamPos.x, camSmooth, dt);
-                state.cameraPos.y = damp(state.cameraPos.y, targetCamPos.y, camSmooth, dt);
-                state.cameraPos.z = damp(state.cameraPos.z, targetCamPos.z, camSmooth, dt);
-                cameraRef.current.position.copy(state.cameraPos);
+            } else if (state.transitionPhase === 'ending') {
+                // CINEMATIC MISSION END TRANSITION
+                // Smoothly animate from captured ending position to idle position
+                const endEase = smootherStep(state.endingProgress);
                 
-                // Smooth look-at target
-                state.cameraTarget.x = damp(state.cameraTarget.x, targetLookAt.x, camSmooth * 1.5, dt);
-                state.cameraTarget.y = damp(state.cameraTarget.y, targetLookAt.y, camSmooth * 1.5, dt);
-                state.cameraTarget.z = damp(state.cameraTarget.z, targetLookAt.z, camSmooth * 1.5, dt);
-                cameraRef.current.lookAt(state.cameraTarget);
+                // Calculate the idle camera position (where we want to end up)
+                const idleCam = calcPhaseCamera(-1, state.shipPos.z, state.shipPos.y);
                 
-            } else {
-                // Smooth idle camera with gentle movement
-                const idlePos = new THREE.Vector3(
-                    Math.sin(time * 0.2) * 2,
-                    3 + Math.sin(time * 0.3) * 0.5,
-                    12 + Math.sin(time * 0.25) * 1
+                // Smoothly interpolate from starting position to idle position
+                targetCamPos = state.endingCameraStartPos.clone().lerp(idleCam.pos, endEase);
+                targetLookAt = state.endingCameraStartTarget.clone().lerp(
+                    new THREE.Vector3(state.shipPos.x, state.shipPos.y * 0.5, state.shipPos.z - 5),
+                    endEase
                 );
                 
-                state.cameraPos.x = damp(state.cameraPos.x, idlePos.x, camSmooth, dt);
-                state.cameraPos.y = damp(state.cameraPos.y, idlePos.y, camSmooth, dt);
-                state.cameraPos.z = damp(state.cameraPos.z, idlePos.z, camSmooth, dt);
-                cameraRef.current.position.copy(state.cameraPos);
+                // Use slower smoothing during the ending for buttery feel
+                camSmooth = baseCamSmooth * 0.4 * (1 + endEase); // Gets slightly faster as we approach idle
                 
-                if(shipRef.current) {
-                    const lookTarget = new THREE.Vector3(
-                        state.shipPos.x,
-                        state.shipPos.y * 0.5,
-                        state.shipPos.z - 5
-                    );
-                    state.cameraTarget.x = damp(state.cameraTarget.x, lookTarget.x, 3.0, dt);
-                    state.cameraTarget.y = damp(state.cameraTarget.y, lookTarget.y, 3.0, dt);
-                    state.cameraTarget.z = damp(state.cameraTarget.z, lookTarget.z, 3.0, dt);
-                    cameraRef.current.lookAt(state.cameraTarget);
-                }
+            } else {
+                // Idle state - gentle movement
+                const idleCam = calcPhaseCamera(-1, state.shipPos.z, state.shipPos.y);
+                targetCamPos = idleCam.pos;
+                targetLookAt = new THREE.Vector3(
+                    state.shipPos.x,
+                    state.shipPos.y * 0.5,
+                    state.shipPos.z - 5
+                );
             }
+            
+            // Apply momentum-based smoothing for extra fluidity
+            const targetVelocity = targetCamPos.clone().sub(state.cameraPos);
+            state.cameraPosVelocity.lerp(targetVelocity, camSmooth * dt * 2);
+            state.cameraPos.add(state.cameraPosVelocity.clone().multiplyScalar(dt * camSmooth));
+            cameraRef.current.position.copy(state.cameraPos);
+            
+            // Smooth look-at target with momentum
+            const targetLookVelocity = targetLookAt.clone().sub(state.cameraTarget);
+            state.cameraTargetVelocity.lerp(targetLookVelocity, camSmooth * 1.2 * dt * 2);
+            state.cameraTarget.add(state.cameraTargetVelocity.clone().multiplyScalar(dt * camSmooth * 1.2));
+            cameraRef.current.lookAt(state.cameraTarget);
         }
 
         // -- PLANETA (smooth rotation with subtle wobble) --
@@ -779,7 +1068,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
             }
         });
 
-        // -- PARTÍCULAS (FUEGO ULTRA SMOOTH) --
+        // -- PARTÍCULAS (FUEGO ULTRA SMOOTH CON EFECTOS POR TIPO) --
         const pList = particles.current;
         const landed = (progress > 0.43 && progress < 0.57);
         
@@ -788,8 +1077,9 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
         const spawnRate = landed ? 0.3 : baseSpawnRate;
         const fireIntensity = isMining ? 2.5 : 1.0;
         
-        // Get nozzle fire colors from prop (convert hex string to number)
+        // Get nozzle fire colors and type from prop
         const nozzleColors = window.nozzleFireColors || ['#ff6600', '#ffaa00', '#ffffff'];
+        const nozzleType = window.nozzleFireType || 'standard';
         const hexToNumber = (hex) => parseInt(hex.replace('#', ''), 16);
         
         // Color gradient based on nozzle fire selection
@@ -797,70 +1087,406 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
         const midColor = hexToNumber(nozzleColors[1]);
         const outerColor = hexToNumber(nozzleColors[0]);
         
-        // Spawn multiple particles per frame for denser fire
-        const spawnCount = Math.random() < spawnRate ? (isMining ? 3 : 2) : 0;
+        // Spawn particles based on nozzle type
+        const spawnCount = Math.random() < spawnRate ? (isMining ? 4 : 2) : 0;
         
         for(let s = 0; s < spawnCount; s++) {
-            const p = pList.find(x => x.life <= 0);
+            // Find available particle matching the current nozzle type
+            // Mix special effects with standard particles (60% special, 40% standard when not standard type)
+            const targetEffect = nozzleType === 'standard' ? 'standard' : 
+                                (s === 0 || Math.random() < 0.6 ? nozzleType : 'standard');
+            
+            const p = pList.find(x => x.life <= 0 && x.effectType === targetEffect);
             if(p && shipRef.current) {
-                p.maxLife = 0.8 + Math.random() * 0.4;
                 p.life = p.maxLife;
                 p.mesh.visible = true;
                 
-                // Randomized spawn position around engine nozzle
+                // Base nozzle position
                 const nozzleOffset = -1.8 - Math.random() * 0.3;
-                const spread = p.type === 'core' ? 0.1 : (p.type === 'outer' ? 0.25 : 0.15);
-                const offset = new THREE.Vector3(
-                    nozzleOffset,
-                    (Math.random() - 0.5) * spread,
-                    (Math.random() - 0.5) * spread
-                );
-                offset.applyEuler(shipRef.current.rotation);
-                p.mesh.position.copy(shipRef.current.position).add(offset);
                 
-                // Velocity with turbulence
-                const baseSpeed = (isMining ? 0.6 : 0.15) * (p.type === 'core' ? 1.2 : 1.0);
-                const turbulence = p.type === 'spark' ? 0.15 : 0.08;
-                const vel = new THREE.Vector3(
-                    -baseSpeed - Math.random() * 0.15,
-                    (Math.random() - 0.5) * turbulence,
-                    (Math.random() - 0.5) * turbulence
-                );
-                vel.applyEuler(shipRef.current.rotation);
-                p.velocity.copy(vel);
+                // Type-specific spawn behavior
+                switch(p.effectType) {
+                    case 'rings': {
+                        // Plasma rings - spawn at nozzle and expand outward like the CSS animation
+                        const offset = new THREE.Vector3(nozzleOffset + 0.5, 0, 0);
+                        offset.applyEuler(shipRef.current.rotation);
+                        p.mesh.position.copy(shipRef.current.position).add(offset);
+                        
+                        // Orient ring perpendicular to travel direction (face the exhaust)
+                        p.mesh.rotation.copy(shipRef.current.rotation);
+                        p.mesh.rotation.y += Math.PI / 2;
+                        
+                        // Velocity - rings travel outward from engine
+                        const baseSpeed = isMining ? 1.2 : 0.4;
+                        const vel = new THREE.Vector3(-baseSpeed, 0, 0);
+                        vel.applyEuler(shipRef.current.rotation);
+                        p.velocity.copy(vel);
+                        
+                        // Initialize ring expansion properties
+                        p.maxLife = isMining ? 1.8 : 1.2; // Longer life for visible expansion
+                        p.life = p.maxLife;
+                        p.startScale = 0.15; // Start very small
+                        p.endScale = isMining ? 4.0 : 2.5; // Expand to large size
+                        p.mesh.scale.set(p.startScale, p.startScale, p.startScale * 0.4);
+                        
+                        // Ring trails follow behind with slight spread
+                        if(p.type === 'ringTrail') {
+                            p.maxLife = isMining ? 1.0 : 0.7;
+                            p.life = p.maxLife;
+                            const trailSpread = 0.25;
+                            p.mesh.position.y += (Math.random() - 0.5) * trailSpread;
+                            p.mesh.position.z += (Math.random() - 0.5) * trailSpread;
+                            // Trail particles are faster but smaller
+                            p.velocity.multiplyScalar(1.3);
+                        }
+                        break;
+                    }
+                    
+                    case 'electric': {
+                        // Electric bolts with random jitter
+                        const spread = p.type === 'bolt' ? 0.15 : 0.25;
+                        const offset = new THREE.Vector3(
+                            nozzleOffset,
+                            (Math.random() - 0.5) * spread,
+                            (Math.random() - 0.5) * spread
+                        );
+                        offset.applyEuler(shipRef.current.rotation);
+                        p.mesh.position.copy(shipRef.current.position).add(offset);
+                        
+                        // Random rotation for bolts
+                        p.mesh.rotation.set(
+                            Math.random() * Math.PI,
+                            Math.random() * Math.PI,
+                            Math.random() * Math.PI
+                        );
+                        
+                        const baseSpeed = isMining ? 0.9 : 0.3;
+                        const vel = new THREE.Vector3(
+                            -baseSpeed - Math.random() * 0.3,
+                            (Math.random() - 0.5) * 0.4,
+                            (Math.random() - 0.5) * 0.4
+                        );
+                        vel.applyEuler(shipRef.current.rotation);
+                        p.velocity.copy(vel);
+                        
+                        // Store jitter for animation
+                        if(p.jitterOffset) p.jitterOffset.set(0, 0, 0);
+                        break;
+                    }
+                    
+                    case 'starburst': {
+                        // Stars burst outward in random directions
+                        const spread = p.type === 'star' ? 0.15 : 0.25;
+                        const offset = new THREE.Vector3(
+                            nozzleOffset,
+                            (Math.random() - 0.5) * spread,
+                            (Math.random() - 0.5) * spread
+                        );
+                        offset.applyEuler(shipRef.current.rotation);
+                        p.mesh.position.copy(shipRef.current.position).add(offset);
+                        
+                        // Orient stars to face camera initially for better visibility
+                        if(p.type === 'star') {
+                            // Random initial rotation to show star shape
+                            p.mesh.rotation.set(
+                                Math.random() * Math.PI * 2,
+                                Math.random() * Math.PI * 2,
+                                Math.random() * Math.PI * 2
+                            );
+                        }
+                        
+                        const baseSpeed = isMining ? 0.6 : 0.25;
+                        const spreadSpeed = p.type === 'fragment' ? 0.4 : 0.2;
+                        const vel = new THREE.Vector3(
+                            -baseSpeed - Math.random() * 0.25,
+                            (Math.random() - 0.5) * spreadSpeed,
+                            (Math.random() - 0.5) * spreadSpeed
+                        );
+                        vel.applyEuler(shipRef.current.rotation);
+                        p.velocity.copy(vel);
+                        
+                        // Faster spin speed to showcase the star shape
+                        p.spinSpeed = (Math.random() - 0.5) * 20;
+                        
+                        // Larger initial scale for better visibility
+                        const initScale = (p.type === 'star' ? 1.5 : 0.8) * fireIntensity;
+                        p.mesh.scale.setScalar(initScale);
+                        break;
+                    }
+                    
+                    case 'spiral': {
+                        // Spiral particles - Double Helix structure
+                        const isStream1 = s % 2 === 0; // Alternate streams
+                        const angleBase = isStream1 ? 0 : Math.PI;
+                        const angle = angleBase + (Math.random() * 0.5);
+                        
+                        const offset = new THREE.Vector3(nozzleOffset, 0, 0);
+                        offset.applyEuler(shipRef.current.rotation);
+                        p.mesh.position.copy(shipRef.current.position).add(offset);
+                        
+                        const baseSpeed = isMining ? 0.9 : 0.4;
+                        const vel = new THREE.Vector3(-baseSpeed, 0, 0);
+                        vel.applyEuler(shipRef.current.rotation);
+                        p.velocity.copy(vel);
+                        
+                        p.angle = angle;
+                        p.angleSpeed = 12; // Fast consistent rotation
+                        p.spiralRadius = 0.1;
+                        p.spiralExpansion = 0.3;
+                        
+                        // Scale variation
+                        p.baseScale = p.baseScale * (0.8 + Math.random() * 0.4);
+                        break;
+                    }
+                    
+                    case 'nova': {
+                        // Nova bursts outward explosively
+                        const burstAngle = p.burstAngle || Math.random() * Math.PI * 2;
+                        const burstPitch = (Math.random() - 0.5) * Math.PI * 0.5;
+                        
+                        const offset = new THREE.Vector3(nozzleOffset + 0.2, 0, 0);
+                        offset.applyEuler(shipRef.current.rotation);
+                        p.mesh.position.copy(shipRef.current.position).add(offset);
+                        
+                        const baseSpeed = isMining ? 0.7 : 0.25;
+                        const burstSpeed = p.type === 'novaCore' ? baseSpeed * 0.8 : baseSpeed * 1.2;
+                        const vel = new THREE.Vector3(
+                            -burstSpeed + Math.cos(burstAngle) * 0.2,
+                            Math.sin(burstPitch) * burstSpeed * 0.5,
+                            Math.sin(burstAngle) * burstSpeed * 0.5
+                        );
+                        vel.applyEuler(shipRef.current.rotation);
+                        p.velocity.copy(vel);
+                        break;
+                    }
+                    
+                    default: {
+                        // Standard fire particles
+                        const spread = p.type === 'core' ? 0.1 : (p.type === 'outer' ? 0.25 : 0.15);
+                        const offset = new THREE.Vector3(
+                            nozzleOffset,
+                            (Math.random() - 0.5) * spread,
+                            (Math.random() - 0.5) * spread
+                        );
+                        offset.applyEuler(shipRef.current.rotation);
+                        p.mesh.position.copy(shipRef.current.position).add(offset);
+                        
+                        const baseSpeed = (isMining ? 0.6 : 0.15) * (p.type === 'core' ? 1.2 : 1.0);
+                        const turbulence = p.type === 'spark' ? 0.15 : 0.08;
+                        const vel = new THREE.Vector3(
+                            -baseSpeed - Math.random() * 0.15,
+                            (Math.random() - 0.5) * turbulence,
+                            (Math.random() - 0.5) * turbulence
+                        );
+                        vel.applyEuler(shipRef.current.rotation);
+                        p.velocity.copy(vel);
+                    }
+                }
                 
-                // Set color based on particle type
-                const color = p.type === 'core' ? coreColor : (p.type === 'outer' ? midColor : outerColor);
+                // Set color based on particle type and effect
+                // Special effects use vibrant colors (not white) for visual impact
+                let color;
+                if(p.effectType === 'rings') {
+                    // Rings: outer color (bright pink #ff00aa), trails: mid color (lighter pink #ff66cc)
+                    color = p.type === 'ring' ? outerColor : midColor;
+                } else if(p.effectType === 'starburst') {
+                    // Starburst: stars use midColor (yellow), fragments use outerColor (gold)
+                    // Avoid white core to match the vibrant CSS preview
+                    color = p.type === 'star' ? midColor : outerColor;
+                } else if(p.effectType === 'electric') {
+                    // Electric: bolts use midColor (cyan), sparks use outerColor (bright cyan)
+                    color = p.type === 'bolt' ? midColor : outerColor;
+                } else if(p.effectType === 'spiral') {
+                    // Spiral: Strictly purple shades (Deep Purple to Light Purple)
+                    // Avoid blending to white
+                    color = Math.random() > 0.4 ? outerColor : midColor;
+                } else if(p.effectType === 'nova') {
+                    // Nova: core uses midColor (orange), bursts use outerColor (red-orange)
+                    color = p.type === 'novaCore' ? midColor : outerColor;
+                } else {
+                    // Standard fire uses all three colors
+                    color = p.type === 'core' ? coreColor : 
+                           (p.type === 'outer' ? midColor : outerColor);
+                }
                 p.mesh.material.color.setHex(color);
                 p.mesh.material.opacity = 1;
             }
         }
         
-        // Update existing particles with smooth decay
+        // Update existing particles with type-specific behavior
         pList.forEach(p => {
             if(p.life > 0) {
                 const lifeRatio = p.life / p.maxLife;
-                const decayRate = 0.025 * dtScale * (p.type === 'spark' ? 1.5 : 1.0);
+                const decayRate = 0.025 * dtScale * (p.type === 'spark' || p.type === 'electricSpark' ? 1.5 : 1.0);
                 p.life -= decayRate;
                 
-                // Smooth velocity with slight drag and gravity
-                p.velocity.multiplyScalar(0.98);
-                p.velocity.y -= 0.002 * dtScale; // Subtle gravity
-                
-                // Add subtle turbulence
-                p.velocity.x += (Math.random() - 0.5) * 0.01;
-                p.velocity.y += (Math.random() - 0.5) * 0.008;
-                p.velocity.z += (Math.random() - 0.5) * 0.008;
-                
-                p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
-                
-                // Smooth scale curve
-                const scaleCurve = smoothStep(lifeRatio) * fireIntensity * p.baseScale;
-                p.mesh.scale.setScalar(scaleCurve);
-                
-                // Smooth opacity fade
-                const opacityCurve = lifeRatio * lifeRatio;
-                p.mesh.material.opacity = opacityCurve;
+                // Type-specific update behavior
+                switch(p.effectType) {
+                    case 'rings': {
+                        // Plasma rings - smooth physics matching CSS animation
+                        const progress = 1 - lifeRatio; // 0 at start, 1 at end
+                        
+                        // Slight deceleration as rings travel
+                        p.velocity.multiplyScalar(0.985);
+                        p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                        
+                        if(p.type === 'ring') {
+                            // Ring expansion curve: start small, expand smoothly to large
+                            // Using eased curve for smooth expansion (like CSS scale 0.3 → 3)
+                            const startScale = p.startScale || 0.15;
+                            const endScale = p.endScale || 3.0;
+                            const expansionCurve = easeOutQuart(progress); // Fast start, smooth end
+                            const currentScale = startScale + (endScale - startScale) * expansionCurve;
+                            
+                            // Keep ring thin as it expands (like a real plasma ring)
+                            p.mesh.scale.set(currentScale, currentScale, currentScale * 0.15);
+                            
+                            // Opacity: fade in fast (0-15%), stay bright (15-70%), fade out (70-100%)
+                            let opacity;
+                            if(progress < 0.15) {
+                                opacity = smoothStep(progress / 0.15) * 0.95; // Quick fade in
+                            } else if(progress < 0.7) {
+                                opacity = 0.9 - (progress - 0.15) * 0.2; // Slight fade during travel
+                            } else {
+                                opacity = 0.7 * (1 - smoothStep((progress - 0.7) / 0.3)); // Fade out
+                            }
+                            p.mesh.material.opacity = opacity * fireIntensity * 0.4;
+                        } else {
+                            // Ring trails - smaller glowing particles following behind
+                            const trailScale = smoothStep(lifeRatio) * fireIntensity * p.baseScale * 1.2;
+                            p.mesh.scale.setScalar(trailScale);
+                            
+                            // Trails fade out smoothly
+                            p.mesh.material.opacity = lifeRatio * lifeRatio * 0.8;
+                        }
+                        break;
+                    }
+                    
+                    case 'electric': {
+                        // Electric particles jitter chaotically
+                        if(p.type === 'bolt') {
+                            // Bolts flicker and jitter
+                            p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                            
+                            // Random jitter
+                            const jitter = 0.1;
+                            p.mesh.position.x += (Math.random() - 0.5) * jitter;
+                            p.mesh.position.y += (Math.random() - 0.5) * jitter;
+                            p.mesh.position.z += (Math.random() - 0.5) * jitter;
+                            
+                            // Random rotation for chaotic look
+                            p.mesh.rotation.x += (Math.random() - 0.5) * 0.5;
+                            p.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
+                            
+                            // Scale fluctuates
+                            const flicker = 0.5 + Math.random() * 1.5;
+                            p.mesh.scale.set(p.baseScale * flicker, p.baseScale * 0.5, p.baseScale * 0.5);
+                            
+                            // Opacity flickers
+                            p.mesh.material.opacity = Math.random() > 0.3 ? lifeRatio : lifeRatio * 0.3;
+                        } else {
+                            // Sparks move erratically
+                            p.velocity.x += (Math.random() - 0.5) * 0.05;
+                            p.velocity.y += (Math.random() - 0.5) * 0.05;
+                            p.velocity.z += (Math.random() - 0.5) * 0.05;
+                            p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                            
+                            const scaleCurve = smoothStep(lifeRatio) * fireIntensity * p.baseScale;
+                            p.mesh.scale.setScalar(scaleCurve);
+                            p.mesh.material.opacity = lifeRatio;
+                        }
+                        break;
+                    }
+                    
+                    case 'starburst': {
+                        // Stars spin as they travel - slower deceleration for longer travel
+                        p.velocity.multiplyScalar(0.985);
+                        p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                        
+                        // Spin the star/fragment - more dramatic for stars
+                        if(p.type === 'star') {
+                            p.mesh.rotation.x += p.spinSpeed * dtScale * 0.15;
+                            p.mesh.rotation.y += p.spinSpeed * dtScale * 0.2;
+                            p.mesh.rotation.z += p.spinSpeed * dtScale * 0.12;
+                        } else {
+                            p.mesh.rotation.x += p.spinSpeed * dtScale * 0.1;
+                            p.mesh.rotation.y += p.spinSpeed * dtScale * 0.15;
+                            p.mesh.rotation.z += p.spinSpeed * dtScale * 0.08;
+                        }
+                        
+                        // Star particles stay larger for better visibility
+                        const starMultiplier = p.type === 'star' ? 1.8 : 1.0;
+                        const scaleCurve = smoothStep(lifeRatio) * fireIntensity * p.baseScale * starMultiplier;
+                        p.mesh.scale.setScalar(scaleCurve);
+                        
+                        // Stars glow brighter
+                        p.mesh.material.opacity = lifeRatio * lifeRatio * (p.type === 'star' ? 1.0 : 0.85);
+                        break;
+                    }
+                    
+                    case 'spiral': {
+                        // Spiral particles - Continuous lines/trails
+                        p.velocity.multiplyScalar(0.98); 
+                        p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                        
+                        // Update spiral motion
+                        p.angle += p.angleSpeed * dtScale;
+                        p.spiralRadius += p.spiralExpansion * dtScale;
+                        
+                        // Calculate orbital offset
+                        const orbitForce = 0.15 * dtScale;
+                        const dX = Math.cos(p.angle) * orbitForce * p.spiralRadius;
+                        const dY = Math.sin(p.angle) * orbitForce * p.spiralRadius;
+                        
+                        p.mesh.position.x += dX; 
+                        p.mesh.position.y += dY; 
+                        
+                        // Orient the "line" (stretched cone) along the spiral tangent
+                        // Cone points Y-up. Rotate X to align with tangent of circle in YZ plane
+                        p.mesh.rotation.x = p.angle + (Math.PI / 2);
+                        p.mesh.rotation.z = 0; // Keep clean spiral
+                        
+                        // Stretch to look like a line
+                        const scaleCurve = smoothStep(lifeRatio) * fireIntensity * p.baseScale;
+                        // Scale X/Z thin, Scale Y long (length of trail)
+                        p.mesh.scale.set(0.5 * scaleCurve, 6.0 * scaleCurve, 0.5 * scaleCurve);
+                        
+                        // Pulse opacity - keep it visible and purple
+                        p.mesh.material.opacity = lifeRatio * (0.8 + Math.sin(p.angle * 3) * 0.2);
+                        break;
+                    }
+                    
+                    case 'nova': {
+                        // Nova particles burst and fade quickly
+                        p.velocity.multiplyScalar(0.94);
+                        p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                        
+                        // Nova particles scale up then down
+                        const novaCurve = Math.sin(lifeRatio * Math.PI);
+                        const scaleCurve = novaCurve * fireIntensity * p.baseScale * 1.5;
+                        p.mesh.scale.setScalar(scaleCurve);
+                        
+                        // Bright at start, quick fade
+                        p.mesh.material.opacity = lifeRatio * lifeRatio * lifeRatio;
+                        break;
+                    }
+                    
+                    default: {
+                        // Standard fire particle behavior
+                        p.velocity.multiplyScalar(0.98);
+                        p.velocity.y -= 0.002 * dtScale;
+                        
+                        p.velocity.x += (Math.random() - 0.5) * 0.01;
+                        p.velocity.y += (Math.random() - 0.5) * 0.008;
+                        p.velocity.z += (Math.random() - 0.5) * 0.008;
+                        
+                        p.mesh.position.add(p.velocity.clone().multiplyScalar(dtScale));
+                        
+                        const scaleCurve = smoothStep(lifeRatio) * fireIntensity * p.baseScale;
+                        p.mesh.scale.setScalar(scaleCurve);
+                        p.mesh.material.opacity = lifeRatio * lifeRatio;
+                    }
+                }
                 
                 if(p.life <= 0) p.mesh.visible = false;
             }
@@ -917,9 +1543,10 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
     window.currentTime = timeLeft;
   }, [missionState, totalDuration, timeLeft]);
 
-  // Sync nozzle fire colors
+  // Sync nozzle fire colors and type
   useEffect(() => {
     window.nozzleFireColors = nozzleFire?.colors || ['#ff6600', '#ffaa00', '#ffffff'];
+    window.nozzleFireType = nozzleFire?.type || 'standard';
   }, [nozzleFire]);
 
   return <div ref={mountRef} id="canvas-container" className="absolute top-0 left-0 w-full h-full z-0 bg-black" />;

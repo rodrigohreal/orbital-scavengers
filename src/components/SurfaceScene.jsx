@@ -14,6 +14,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
 const smoothStep = (t) => t * t * (3 - 2 * t);
+const smootherStep = (t) => t * t * t * (t * (t * 6 - 15) + 10); // Quintic for ultra-smooth
 
 const damp = (current, target, smoothing, dt) => {
   return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-smoothing * dt));
@@ -36,14 +37,22 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
     shipRot: new THREE.Euler(0, 0, 0),
     cameraPos: new THREE.Vector3(0, 5, 20),
     cameraTarget: new THREE.Vector3(0, 5, 0),
+    cameraPosVelocity: new THREE.Vector3(0, 0, 0), // Momentum-based smoothing
+    cameraTargetVelocity: new THREE.Vector3(0, 0, 0),
     cameraFov: 60,
+    cameraFovVelocity: 0,
     engineIntensity: 0,
     shakeIntensity: 0,
     missionStartTime: 0,
     isMissionActive: false,
     smoothProgress: 0,
     opacity: 0,
-    shockwaveTime: -1
+    opacityVelocity: 0, // For smoother opacity transitions
+    shockwaveTime: -1,
+    transitionPhase: 'idle', // 'idle', 'entering', 'active', 'exiting'
+    transitionProgress: 0,
+    exitingProgress: 0, // Dedicated exit animation progress
+    frozenProgress: 0 // Freeze progress at exit start
   });
 
   const createNoiseTexture = (c1, c2) => {
@@ -101,7 +110,7 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 0.95;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.useLegacyLights = false;
     renderer.shadowMap.enabled = true;
@@ -115,13 +124,13 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
     // 2. POST FX (bloom + film + vignette + FXAA)
     const renderScene = new RenderPass(scene, camera);
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.9, 0.45, 0.85);
-    bloomPass.threshold = 0.55;
-    bloomPass.strength = 0.7;
-    bloomPass.radius = 0.55;
-    const filmPass = new FilmPass(0.28, 0.18, 648, false);
+    bloomPass.threshold = 0.65;
+    bloomPass.strength = 0.5;
+    bloomPass.radius = 0.4;
+    const filmPass = new FilmPass(0.22, 0.15, 648, false);
     const vignettePass = new ShaderPass(VignetteShader);
-    vignettePass.uniforms.offset.value = 0.88;
-    vignettePass.uniforms.darkness.value = 1.15;
+    vignettePass.uniforms.offset.value = 0.75;
+    vignettePass.uniforms.darkness.value = 1.4;
     const fxaaPass = new ShaderPass(FXAAShader);
     fxaaPass.material.uniforms.resolution.value.set(1 / window.innerWidth, 1 / window.innerHeight);
     const outputPass = new OutputPass();
@@ -134,10 +143,10 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
     composer.addPass(outputPass);
 
     // 3. ILUMINACIÓN
-    const ambientLight = new THREE.HemisphereLight(atmosphereColor, 0x0a0a10, 0.9);
+    const ambientLight = new THREE.HemisphereLight(atmosphereColor, 0x080810, 0.7);
     scene.add(ambientLight);
     
-    const sunLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    const sunLight = new THREE.DirectionalLight(0xfff8f0, 1.6);
     sunLight.position.set(70, 120, 35);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(1024, 1024);
@@ -150,7 +159,7 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
     scene.add(sunLight);
 
     // Rim/fill light for more cinematic separation
-    const rimLight = new THREE.DirectionalLight(atmosphereColor.clone().lerp(new THREE.Color(0xffffff), 0.25), 1.35);
+    const rimLight = new THREE.DirectionalLight(atmosphereColor.clone().lerp(new THREE.Color(0xffffff), 0.25), 0.9);
     rimLight.position.set(-60, 45, -80);
     scene.add(rimLight);
 
@@ -193,10 +202,10 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
           float horizon = pow(1.0 - abs(dir.y), 5.0);
           col += topColor * horizon * 0.25;
 
-          // sun bloom-ish lobe
+          // sun bloom-ish lobe - more subtle
           float s = max(dot(dir, normalize(sunDir)), 0.0);
-          col += vec3(1.0, 0.95, 0.85) * pow(s, 110.0) * 1.2;
-          col += vec3(1.0, 0.7, 0.35) * pow(s, 18.0) * 0.2;
+          col += vec3(1.0, 0.95, 0.85) * pow(s, 140.0) * 0.9;
+          col += vec3(1.0, 0.7, 0.35) * pow(s, 24.0) * 0.12;
 
           // subtle film noise in sky only
           float n = hash(gl_FragCoord.xy + time * 60.0);
@@ -393,39 +402,103 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
         const duration = window.totalTime || 15;
         const time = performance.now() * 0.001;
         
-        // Sync progress
+        // Sync progress with smooth transitions
         if (missionState === 'mining') {
              if (!state.isMissionActive) {
                 state.isMissionActive = true;
                 state.missionStartTime = performance.now();
-                state.smoothProgress = 0;
                 state.shockwaveTime = -1;
+                state.transitionPhase = 'entering';
+                state.transitionProgress = 0;
+                // Don't reset smoothProgress - let it blend from current value
             }
+            
+            // Track transition phase
+            if (state.transitionPhase === 'entering') {
+                state.transitionProgress = Math.min(state.transitionProgress + dt * 1.5, 1.0);
+                if (state.transitionProgress >= 1.0) {
+                    state.transitionPhase = 'active';
+                }
+            }
+            
             const elapsedMs = performance.now() - state.missionStartTime;
             const elapsedSeconds = elapsedMs / 1000;
-            const rawProgress = Math.min(elapsedSeconds / duration, 1.0);
-            state.smoothProgress = damp(state.smoothProgress, rawProgress, 6.0, dt);
+            const rawProgress = Math.min(elapsedSeconds / duration, 0.995);
+            
+            // Variable smoothing - slower at start for buttery entrance
+            const progressSmoothing = state.transitionPhase === 'entering' ? 4.0 : 8.0;
+            state.smoothProgress = damp(state.smoothProgress, rawProgress, progressSmoothing, dt);
         } else {
-             state.isMissionActive = false;
-             state.smoothProgress = 0; 
-             state.shockwaveTime = -1;
+            // Mission ended - smooth exit transition
+            if (state.isMissionActive) {
+                state.isMissionActive = false;
+                state.shockwaveTime = -1;
+                state.transitionPhase = 'exiting';
+                state.transitionProgress = 0;
+                state.exitingProgress = 0;
+                state.frozenProgress = state.smoothProgress; // Freeze current progress
+            }
+            
+            // Gradual progress decay during exit - slower for smoother fade
+            if (state.transitionPhase === 'exiting') {
+                // Slower transition (takes ~2 seconds for smooth fade out)
+                state.transitionProgress = Math.min(state.transitionProgress + dt * 0.5, 1.0);
+                state.exitingProgress = Math.min(state.exitingProgress + dt * 0.6, 1.0);
+                
+                // Use quintic easing for ultra-smooth exit
+                const exitEase = smootherStep(state.transitionProgress);
+                // Blend from frozen progress to 0 smoothly
+                state.smoothProgress = THREE.MathUtils.lerp(state.frozenProgress, 0, exitEase);
+                
+                if (state.transitionProgress >= 1.0 && state.exitingProgress >= 1.0) {
+                    state.transitionPhase = 'idle';
+                    state.smoothProgress = 0;
+                }
+            } else {
+                state.smoothProgress = damp(state.smoothProgress, 0, 2.0, dt);
+            }
         }
 
         const progress = state.smoothProgress;
 
-        // Cinematic visibility window (fade in, hold, fade out)
+        // Cinematic visibility window (fade in, hold, fade out) - with momentum smoothing
         const showStart = 0.22;
         const showEnd = 0.86;
-        const fadeInEnd = showStart + 0.05;
-        const fadeOutStart = showEnd - 0.07;
+        const fadeInEnd = showStart + 0.06;  // Slightly longer fade in
+        const fadeOutStart = showEnd - 0.10; // Longer fade out for smoother exit
         let targetOpacity = 0;
+        
         if (missionState === 'mining') {
-          if (progress < showStart || progress > showEnd) targetOpacity = 0;
-          else if (progress < fadeInEnd) targetOpacity = smoothStep((progress - showStart) / (fadeInEnd - showStart));
-          else if (progress > fadeOutStart) targetOpacity = 1 - smoothStep((progress - fadeOutStart) / (showEnd - fadeOutStart));
-          else targetOpacity = 1;
+          if (progress < showStart) {
+            targetOpacity = 0;
+          } else if (progress < fadeInEnd) {
+            // Smoother fade in with quintic easing
+            targetOpacity = smootherStep((progress - showStart) / (fadeInEnd - showStart));
+          } else if (progress > fadeOutStart) {
+            // Smoother fade out
+            targetOpacity = 1 - smootherStep((progress - fadeOutStart) / (showEnd - fadeOutStart));
+          } else if (progress > showEnd) {
+            targetOpacity = 0;
+          } else {
+            targetOpacity = 1;
+          }
+        } else if (state.transitionPhase === 'exiting') {
+          // During exit transition, use dedicated exit progress for super smooth fade
+          const exitEase = smootherStep(state.exitingProgress);
+          // Fade from whatever opacity we had to 0, smoothly
+          targetOpacity = state.opacity * (1 - exitEase * 1.2); // Slightly faster fade than camera transition
+          targetOpacity = Math.max(0, targetOpacity);
         }
-        state.opacity = damp(state.opacity, targetOpacity, 4.5, dt);
+        
+        // Momentum-based opacity smoothing for ultra-smooth transitions
+        // Slower during exit for gentler fade
+        const isExiting = state.transitionPhase === 'exiting';
+        const opacitySmoothing = isExiting ? 2.5 : 4.0;
+        const opacitySpeed = isExiting ? 2.0 : 3.0;
+        
+        const opacityDiff = targetOpacity - state.opacity;
+        state.opacityVelocity = damp(state.opacityVelocity, opacityDiff * opacitySpeed, opacitySmoothing, dt);
+        state.opacity = THREE.MathUtils.clamp(state.opacity + state.opacityVelocity * dt, 0, 1);
         renderer.domElement.style.opacity = state.opacity;
         if (skyRef.current) {
           skyRef.current.material.uniforms.time.value = time;
@@ -477,17 +550,17 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
               camPosOffset.lerp(new THREE.Vector3(12, 5, 16), easeT);
               targetShake = (1 - easeT) * 0.06;
 
-              // entry FX intensity
+              // entry FX intensity - more subtle heat glow
               const heat = smoothStep(1 - Math.abs(easeT - 0.35) / 0.35);
               if (noseGlowRef.current) {
-                // Reduced opacity base from 0.15 to 0.0 to avoid "white sphere" at landing
+                // Subtle plasma glow, not overwhelming
                 noseGlowRef.current.material.opacity = THREE.MathUtils.lerp(
                   noseGlowRef.current.material.opacity,
-                  heat * 0.85, 
-                  0.12
+                  heat * 0.45, 
+                  0.1
                 );
-                // Scale scales with heat, but defaults to small when no heat
-                noseGlowRef.current.scale.setScalar(2 + heat * 24); 
+                // Smaller, more focused glow
+                noseGlowRef.current.scale.setScalar(1.5 + heat * 10); 
                 noseGlowRef.current.position.set(2.2, 0.1, 0);
               }
 
@@ -499,11 +572,11 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
                  }
               }
 
-              // Hot trail + sparks
-              if (Math.random() < 0.65) {
+              // Hot trail + sparks - reduced spawn rate for cleaner look
+              if (Math.random() < 0.35) {
                 spawnParticle(shipRef.current.position, 'heat');
               }
-              if (Math.random() < 0.30) {
+              if (Math.random() < 0.18) {
                 spawnParticle(shipRef.current.position, 'thrust');
               }
               if (laserRef.current) laserRef.current.visible = false;
@@ -599,29 +672,46 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
               }
             }
 
-            // Apply smoothing
-            state.shipPos.lerp(targetPos, 0.12);
+            // Apply smoothing with variable rate based on transition phase
+            const isTransitioning = state.transitionPhase === 'entering' || state.transitionPhase === 'exiting';
+            const posLerpRate = isTransitioning ? 0.08 : 0.12;
+            const rotSmoothing = isTransitioning ? 3.5 : 5.0;
+            
+            state.shipPos.lerp(targetPos, posLerpRate);
             shipRef.current.position.copy(state.shipPos);
             
-            state.shipRot.x = damp(state.shipRot.x, targetRot.x, 5, dt);
-            state.shipRot.y = damp(state.shipRot.y, targetRot.y, 5, dt);
-            state.shipRot.z = damp(state.shipRot.z, targetRot.z, 5, dt);
+            state.shipRot.x = damp(state.shipRot.x, targetRot.x, rotSmoothing, dt);
+            state.shipRot.y = damp(state.shipRot.y, targetRot.y, rotSmoothing, dt);
+            state.shipRot.z = damp(state.shipRot.z, targetRot.z, rotSmoothing, dt);
             shipRef.current.rotation.copy(state.shipRot);
             
-            // Apply Camera Shake
-            state.shakeIntensity = damp(state.shakeIntensity, targetShake, 5, dt);
+            // Apply Camera Shake (reduced during transitions)
+            const shakeMultiplier = isTransitioning ? 0.5 : 1.0;
+            state.shakeIntensity = damp(state.shakeIntensity, targetShake * shakeMultiplier, 5, dt);
             const shake = new THREE.Vector3(
                 (Math.random()-0.5) * state.shakeIntensity,
                 (Math.random()-0.5) * state.shakeIntensity,
                 (Math.random()-0.5) * state.shakeIntensity
             );
 
-            // Camera update
-            state.cameraPos.lerp(camPosOffset, 0.05);
+            // Camera update with momentum-based smoothing
+            const camSmoothing = isTransitioning ? 0.03 : 0.05;
+            const targetCamVelocity = camPosOffset.clone().sub(state.cameraPos);
+            state.cameraPosVelocity.lerp(targetCamVelocity, camSmoothing * 2);
+            state.cameraPos.add(state.cameraPosVelocity.clone().multiplyScalar(camSmoothing));
             cameraRef.current.position.copy(state.cameraPos).add(shake);
-            cameraRef.current.lookAt(state.shipPos);
+            
+            // Smooth camera target with momentum
+            const lookTarget = state.shipPos.clone();
+            const targetLookVelocity = lookTarget.sub(state.cameraTarget);
+            state.cameraTargetVelocity.lerp(targetLookVelocity, camSmoothing * 2.5);
+            state.cameraTarget.add(state.cameraTargetVelocity.clone().multiplyScalar(camSmoothing * 1.2));
+            cameraRef.current.lookAt(state.cameraTarget);
 
-            state.cameraFov = damp(state.cameraFov, targetFov, 3.0, dt);
+            // FOV with momentum smoothing
+            const fovDiff = targetFov - state.cameraFov;
+            state.cameraFovVelocity = damp(state.cameraFovVelocity, fovDiff * 2.0, 3.0, dt);
+            state.cameraFov += state.cameraFovVelocity * dt;
             cameraRef.current.fov = state.cameraFov;
             cameraRef.current.updateProjectionMatrix();
             
@@ -686,8 +776,8 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
             }
         });
 
-        // bloom tuning by phase (entry is brighter, mining is tighter)
-        const bloomTarget = (missionState === 'mining' && progress < 0.45) ? 1.15 : (missionState === 'mining' && progress < 0.62 ? 0.65 : 0.9);
+        // bloom tuning by phase (subtle glow throughout, not blown out)
+        const bloomTarget = (missionState === 'mining' && progress < 0.45) ? 0.7 : (missionState === 'mining' && progress < 0.62 ? 0.45 : 0.55);
         bloomPass.strength = THREE.MathUtils.lerp(bloomPass.strength, bloomTarget, 0.06);
 
         composer.render();
@@ -701,22 +791,22 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
             p.type = type;
             
             if (type === 'thrust') {
-                p.maxLife = 0.75 + Math.random() * 0.35;
+                p.maxLife = 0.55 + Math.random() * 0.25;
                 p.life = p.maxLife;
-                p.baseScale = 1.0;
+                p.baseScale = 0.7;
                 p.mesh.position.copy(pos).add(new THREE.Vector3(-0.4, -0.7, 0));
                 p.mesh.material.blending = THREE.AdditiveBlending;
-                p.mesh.material.color.setHex(0xffaa55);
-                p.velocity.set((Math.random()-0.5) * 0.8, -2.2 - Math.random() * 0.8, (Math.random()-0.5) * 0.8);
+                p.mesh.material.color.setHex(0xe89040);
+                p.velocity.set((Math.random()-0.5) * 0.6, -1.8 - Math.random() * 0.6, (Math.random()-0.5) * 0.6);
             } else if (type === 'heat') {
-                // Re-entry heat trail
-                p.maxLife = 0.55 + Math.random() * 0.35;
+                // Re-entry heat trail - more subtle, cinematic
+                p.maxLife = 0.4 + Math.random() * 0.25;
                 p.life = p.maxLife;
-                p.baseScale = 0.9 + Math.random() * 0.9;
-                p.mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5) * 0.6, (Math.random()-0.5) * 0.4, (Math.random()-0.5) * 0.6));
+                p.baseScale = 0.5 + Math.random() * 0.5;
+                p.mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5) * 0.4, (Math.random()-0.5) * 0.3, (Math.random()-0.5) * 0.4));
                 p.mesh.material.blending = THREE.AdditiveBlending;
-                p.mesh.material.color.setHex(0xff3b00);
-                p.velocity.set((Math.random()-0.5) * 0.5, 0.6 + Math.random() * 1.4, (Math.random()-0.5) * 0.5);
+                p.mesh.material.color.setHex(0xdd4500);
+                p.velocity.set((Math.random()-0.5) * 0.4, 0.4 + Math.random() * 0.9, (Math.random()-0.5) * 0.4);
             } else if (type === 'spark') {
                 // Small focused sparks from laser mining - gentle upward drift
                 p.maxLife = 0.5 + Math.random() * 0.3;
