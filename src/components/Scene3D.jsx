@@ -220,9 +220,9 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
             loadedShip.rotation.y = 0; // A veces vienen mirando al revés
             
             // Normalizar escala si es muy grande o muy pequeña
-            // Queremos que mida aprox 2-3 unidades de largo
+            // Queremos que mida aprox 4 unidades de largo para mejor visibilidad
             const maxDim = Math.max(size.x, size.y, size.z);
-            const targetSize = 3.45;
+            const targetSize = 4.2;
             if(maxDim > 0) {
                 const scaleFactor = targetSize / maxDim;
                 loadedShip.scale.set(scaleFactor, scaleFactor, scaleFactor);

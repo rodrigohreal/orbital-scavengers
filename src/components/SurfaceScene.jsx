@@ -20,7 +20,7 @@ const damp = (current, target, smoothing, dt) => {
   return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-smoothing * dt));
 };
 
-const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
+const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet, spaceshipModel }) => {
   const mountRef = useRef(null);
   const shipRef = useRef(null);
   const cameraRef = useRef(null);
@@ -290,7 +290,7 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
     };
 
     const loader = new GLTFLoader();
-    const modelPath = `${import.meta.env.BASE_URL}nave.glb`;
+    const modelPath = `${import.meta.env.BASE_URL}${spaceshipModel || 'nave.glb'}`;
     loader.load(modelPath, (gltf) => {
         const loadedShip = gltf.scene;
         loadedShip.rotation.y = 0; 
@@ -895,7 +895,7 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet }) => {
         skyMat.dispose();
         renderer.dispose();
     };
-  }, [planet, missionState]); 
+  }, [planet, missionState, spaceshipModel]); 
 
   // Sync Vars
   useEffect(() => {

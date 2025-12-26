@@ -11,9 +11,14 @@ import { ITEMS_DB } from './data/items';
 import { PLANETS } from './data/planets';
 
 const SPACESHIPS = [
-  { id: 0, name: "Nave Estándar", model: "nave.glb", cost: 0, rarity: "Común" },
-  { id: 1, name: "Nave Básica", model: "n_basica.glb", cost: 1000, rarity: "Poco Común" },
-  { id: 2, name: "Nave Graffiti", model: "n_graffiti.glb", cost: 2000, rarity: "Rara" }
+  { id: 0, name: "Nave Estándar", model: "nave.glb", cost: 0, rarity: "Común", description: "Tu nave inicial de exploración" },
+  { id: 1, name: "Nave Básica", model: "n_basica.glb", cost: 1500, rarity: "Poco Común", description: "Diseño mejorado con mejor maniobrabilidad" },
+  { id: 2, name: "Nave Graffiti", model: "n_graffiti.glb", cost: 4000, rarity: "Poco Común", description: "Arte urbano galáctico en cada panel" },
+  { id: 3, name: "Nave Cartoon", model: "n_cartoon.glb", cost: 10000, rarity: "Rara", description: "Estilo animado de otra dimensión" },
+  { id: 4, name: "Nave Antigua", model: "n_antigua.glb", cost: 25000, rarity: "Rara", description: "Reliquia restaurada de civilizaciones pasadas" },
+  { id: 5, name: "Nave Madera", model: "n_madera.glb", cost: 60000, rarity: "Épica", description: "Construcción artesanal con madera cósmica" },
+  { id: 6, name: "Nave Colorida", model: "n_colorida.glb", cost: 150000, rarity: "Épica", description: "Espectro cromático de los nebulosas" },
+  { id: 7, name: "Nave del Futuro", model: "n_del_futuro.glb", cost: 400000, rarity: "Legendaria", description: "Tecnología de una era que aún no existe" }
 ];
 
 const NOZZLE_FIRES = [
@@ -284,7 +289,7 @@ export default function App() {
         spaceshipModel={SPACESHIPS[selectedSpaceship].model}
         nozzleFire={NOZZLE_FIRES[selectedNozzleFire]}
       />
-      <SurfaceScene missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} />
+      <SurfaceScene missionState={missionState} level={droneLevel} totalDuration={totalDuration} timeLeft={timeLeft} planet={currentPlanet} spaceshipModel={SPACESHIPS[selectedSpaceship].model} />
       
       {/* UI LAYER */}
       <div className="absolute inset-0 flex flex-col justify-between z-10 pointer-events-none">
@@ -304,21 +309,21 @@ export default function App() {
               </div>
             </div>
 
-            {/* Mission Control Panel - Bottom Center */}
-            <div className="w-full max-w-md mx-auto glass-panel p-5 rounded-3xl border border-blue-500/30 pointer-events-auto shadow-2xl bg-black/80 backdrop-blur-xl animate-[slideUp_0.6s_ease-out]">
+            {/* Mission Control Panel - Bottom Center (Compact) */}
+            <div className="w-full max-w-xs mx-auto glass-panel p-3 rounded-2xl border border-blue-500/30 pointer-events-auto shadow-2xl bg-black/70 backdrop-blur-xl animate-[slideUp_0.6s_ease-out]">
               
               {/* Toggle Switch */}
-              <div className="flex justify-center mb-4">
-                <div className="bg-gray-900/80 p-1 rounded-full border border-white/10 flex relative">
+              <div className="flex justify-center mb-2">
+                <div className="bg-gray-900/80 p-0.5 rounded-full border border-white/10 flex relative">
                   <button 
                     onClick={() => setSelectionMode('planet')}
-                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectionMode === 'planet' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest transition-all ${selectionMode === 'planet' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
                   >
                     Planetas
                   </button>
                   <button 
                     onClick={() => setSelectionMode('spaceship')}
-                    className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${selectionMode === 'spaceship' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest transition-all ${selectionMode === 'spaceship' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
                   >
                     Naves
                   </button>
@@ -326,34 +331,34 @@ export default function App() {
               </div>
 
               {/* Header Area: Planet Info OR Buy Button */}
-              <div className="mb-4 text-center min-h-[60px] flex flex-col justify-center items-center">
+              <div className="mb-2 text-center min-h-[48px] flex flex-col justify-center items-center">
                 {selectionMode === 'planet' ? (
                     isPlanetUnlocked ? (
                     <>
-                        <p className={`text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
+                        <p className={`text-[10px] font-mono tracking-[0.2em] uppercase font-bold ${missionState === 'mining' ? 'text-yellow-400 animate-pulse' : 'text-cyan-400'}`}>
                         {missionState === 'idle' ? '• SISTEMAS ONLINE •' : missionState === 'mining' ? '>>> VELOCIDAD LUZ <<<' : '• DESTINO ALCANZADO •'}
                         </p>
-                        <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
+                        <h3 className="text-lg font-orbitron font-bold text-white tracking-widest drop-shadow-md">
                         {currentPlanet.name}
                         </h3>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">
-                        Multiplicador: {currentPlanet.rarityMultiplier.toFixed(1)}x
+                        <p className="text-[9px] text-gray-500 uppercase tracking-wider">
+                        Mult: {currentPlanet.rarityMultiplier.toFixed(1)}x
                         </p>
                     </>
                     ) : (
                     <button
                         onClick={() => unlockPlanet(currentPlanet.id)}
                         disabled={!canAffordPlanet}
-                        className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                        className={`w-full py-2 rounded-lg border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all text-sm ${
                             canAffordPlanet 
                             ? 'bg-yellow-600 hover:bg-yellow-500 border-yellow-400 text-white animate-pulse'
                             : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
                         }`}
                     >
-                        <Icons.Lock size={14} />
+                        <Icons.Lock size={12} />
                         <div className="flex flex-col items-start leading-none">
-                            <span className="text-[10px]">COMPRAR {currentPlanet.name}</span>
-                            <span className="text-sm font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
+                            <span className="text-[9px]">COMPRAR {currentPlanet.name}</span>
+                            <span className="text-xs font-mono">{currentPlanet.cost.toLocaleString()} ₡</span>
                         </div>
                     </button>
                     )
@@ -361,30 +366,40 @@ export default function App() {
                     // SPACESHIP INFO / BUY
                     isSpaceshipUnlocked ? (
                         <>
-                            <p className="text-xs font-mono tracking-[0.3em] uppercase font-bold mb-1 text-purple-400">
+                            <p className="text-[10px] font-mono tracking-[0.2em] uppercase font-bold text-purple-400">
                             • NAVE SELECCIONADA •
                             </p>
-                            <h3 className="text-2xl font-orbitron font-bold text-white tracking-widest drop-shadow-md">
+                            <h3 className="text-lg font-orbitron font-bold text-white tracking-widest drop-shadow-md">
                             {currentSpaceship.name}
                             </h3>
-                            <p className="text-[10px] text-gray-500 uppercase tracking-wider">
-                            Rareza: {currentSpaceship.rarity}
+                            <p className={`text-[9px] uppercase tracking-wider font-bold ${
+                              currentSpaceship.rarity === 'Legendaria' ? 'text-yellow-400' :
+                              currentSpaceship.rarity === 'Épica' ? 'text-purple-400' :
+                              currentSpaceship.rarity === 'Rara' ? 'text-blue-400' :
+                              currentSpaceship.rarity === 'Poco Común' ? 'text-emerald-400' : 'text-gray-400'
+                            }`}>
+                            {currentSpaceship.rarity}
                             </p>
                         </>
                     ) : (
                         <button
                             onClick={() => unlockSpaceship(currentSpaceship.id)}
                             disabled={!canAffordSpaceship}
-                            className={`w-full py-3 rounded-xl border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
+                            className={`w-full py-2 rounded-lg border font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all text-sm ${
                                 canAffordSpaceship 
-                                ? 'bg-purple-600 hover:bg-purple-500 border-purple-400 text-white animate-pulse'
+                                ? `${
+                                    currentSpaceship.rarity === 'Legendaria' ? 'bg-yellow-600 hover:bg-yellow-500 border-yellow-400' :
+                                    currentSpaceship.rarity === 'Épica' ? 'bg-purple-600 hover:bg-purple-500 border-purple-400' :
+                                    currentSpaceship.rarity === 'Rara' ? 'bg-blue-600 hover:bg-blue-500 border-blue-400' :
+                                    'bg-emerald-600 hover:bg-emerald-500 border-emerald-400'
+                                  } text-white animate-pulse`
                                 : 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed'
                             }`}
                         >
-                            <Icons.Lock size={14} />
+                            <Icons.Lock size={12} />
                             <div className="flex flex-col items-start leading-none">
-                                <span className="text-[10px]">COMPRAR {currentSpaceship.name}</span>
-                                <span className="text-sm font-mono">{currentSpaceship.cost.toLocaleString()} ₡</span>
+                                <span className="text-[9px]">COMPRAR {currentSpaceship.name}</span>
+                                <span className="text-xs font-mono">{currentSpaceship.cost.toLocaleString()} ₡</span>
                             </div>
                         </button>
                     )
@@ -392,13 +407,13 @@ export default function App() {
               </div>
 
               {/* Control Row: Arrows & Main Button */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                   <button 
                     onClick={() => changeSelection(-1)}
                     disabled={missionState === 'mining'}
-                    className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
+                    className={`p-2 rounded-lg border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
                   >
-                    <Icons.ArrowLeft size={20} />
+                    <Icons.ArrowLeft size={16} />
                   </button>
 
                   <div className="flex-1">
@@ -406,7 +421,7 @@ export default function App() {
                         <button 
                             onClick={startMission} 
                             disabled={!isPlanetUnlocked || !isSpaceshipUnlocked}
-                            className={`w-full py-4 rounded-2xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-base transition-all ${
+                            className={`w-full py-3 rounded-xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-sm transition-all ${
                                 isPlanetUnlocked && isSpaceshipUnlocked
                                 ? 'bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 text-white border-blue-800 active:border-b-0 active:translate-y-1 hover:shadow-blue-500/50'
                                 : 'bg-gray-800 text-gray-500 border-gray-900 cursor-not-allowed'
@@ -417,19 +432,19 @@ export default function App() {
                     )}
 
                     {missionState === 'mining' && (
-                        <div className="w-full bg-gray-900/80 h-14 rounded-2xl overflow-hidden relative border border-gray-700/50 shadow-inner backdrop-blur-sm">
+                        <div className="w-full bg-gray-900/80 h-11 rounded-xl overflow-hidden relative border border-gray-700/50 shadow-inner backdrop-blur-sm">
                         <div 
                             className="h-full bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 animate-pulse transition-all duration-1000" 
                             style={{ width: `${((1 - timeLeft/totalDuration)*100)}%` }} 
                         />
-                        <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-900 font-mono tracking-wider text-lg drop-shadow-lg">
+                        <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-900 font-mono tracking-wider text-base drop-shadow-lg">
                             T-{timeLeft}s
                         </span>
                         </div>
                     )}
 
                     {missionState === 'ready' && (
-                        <button onClick={claim} className="w-full bg-gradient-to-r from-green-500 via-green-400 to-green-500 hover:from-green-400 hover:to-green-300 py-4 rounded-2xl font-bold text-gray-900 tracking-widest shadow-[0_0_25px_rgba(74,222,128,0.6)] animate-pulse active:scale-95 transition-all border-b-4 border-green-700 font-orbitron text-base">
+                        <button onClick={claim} className="w-full bg-gradient-to-r from-green-500 via-green-400 to-green-500 hover:from-green-400 hover:to-green-300 py-3 rounded-xl font-bold text-gray-900 tracking-widest shadow-[0_0_25px_rgba(74,222,128,0.6)] animate-pulse active:scale-95 transition-all border-b-4 border-green-700 font-orbitron text-sm">
                         RECUPERAR CARGA
                         </button>
                     )}
@@ -438,9 +453,9 @@ export default function App() {
                   <button 
                     onClick={() => changeSelection(1)}
                     disabled={missionState === 'mining'}
-                    className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
+                    className={`p-2 rounded-lg border bg-black/50 backdrop-blur-md transition-all ${missionState === 'mining' ? 'opacity-30 border-gray-800 cursor-not-allowed' : 'border-white/10 text-white hover:bg-white/10 hover:scale-105 active:scale-95'}`}
                   >
-                    <Icons.ArrowRight size={20} />
+                    <Icons.ArrowRight size={16} />
                   </button>
               </div>
 
