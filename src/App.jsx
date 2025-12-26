@@ -84,10 +84,21 @@ export default function App() {
 
   // --- HAPTIC FEEDBACK HELPER ---
   const triggerHaptic = (style) => {
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
-    } else if (navigator.vibrate) {
-      navigator.vibrate(style === 'heavy' ? 50 : 20);
+    try {
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        // 'success', 'warning', 'error' use notificationOccurred
+        if (style === 'success' || style === 'warning' || style === 'error') {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred(style);
+        } else {
+          // 'light', 'medium', 'heavy', 'rigid', 'soft' use impactOccurred
+          window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
+        }
+      } else if (navigator.vibrate) {
+        navigator.vibrate(style === 'heavy' ? 50 : 20);
+      }
+    } catch (e) {
+      // Fail silently if haptic feedback is not available
+      console.warn('Haptic feedback failed:', e);
     }
   };
 
