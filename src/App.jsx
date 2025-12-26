@@ -339,7 +339,7 @@ export default function App() {
         
         {/* HOME TAB */}
         {activeTab === 'home' && (
-          <div className="h-full flex flex-col justify-between p-4 pt-16 pb-28 pointer-events-none">
+          <div className="h-full flex flex-col justify-between p-4 pt-20 pb-28 pointer-events-none">
             
             {/* Top Bar: User & Status */}
             <div className="flex justify-between items-start w-full pointer-events-auto">
@@ -527,7 +527,7 @@ export default function App() {
 
         {/* INVENTORY TAB */}
         {activeTab === 'inventory' && (
-          <div className="h-full bg-black/90 backdrop-blur-xl p-4 pt-16 pb-32 overflow-y-auto pointer-events-auto animate-[slideUp_0.4s_ease-out]">
+          <div className="h-full bg-black/90 backdrop-blur-xl p-4 pt-20 pb-32 overflow-y-auto pointer-events-auto animate-[slideUp_0.4s_ease-out]">
             <div className="flex justify-between items-end mb-8 border-b border-white/10 pb-4">
               <div>
                 <h2 className="text-3xl font-bold text-white font-orbitron tracking-wider">BODEGA</h2>
@@ -576,7 +576,7 @@ export default function App() {
 
         {/* SHOP TAB */}
         {activeTab === 'shop' && (
-          <div className="h-full bg-black/90 backdrop-blur-xl p-6 pt-16 pb-32 pointer-events-auto animate-[slideUp_0.4s_ease-out] flex flex-col overflow-y-auto">
+          <div className="h-full bg-black/90 backdrop-blur-xl p-6 pt-20 pb-32 pointer-events-auto animate-[slideUp_0.4s_ease-out] flex flex-col overflow-y-auto">
             <h2 className="text-3xl font-bold text-white font-orbitron mb-2 text-center tracking-widest">INGENIERÍA</h2>
             <p className="text-center text-gray-500 text-xs uppercase tracking-widest mb-8">Mejoras de Dron & Sistemas</p>
             <div className="flex-1 flex flex-col items-center justify-start gap-4">
