@@ -14,7 +14,8 @@ from aiogram.types import (
     InlineKeyboardButton,
     ReplyKeyboardMarkup, 
     KeyboardButton,
-    BotCommand
+    BotCommand,
+    WebAppInfo
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters import Command
@@ -196,6 +197,11 @@ def main_menu_keyboard(user):
     
     kb = InlineKeyboardBuilder()
     
+    kb.row(InlineKeyboardButton(
+        text="🎮 JUGAR EN 3D (Web App)", 
+        web_app=WebAppInfo(url="https://rodrigohreal.github.io/orbital-scavengers")
+    ))
+
     kb.row(InlineKeyboardButton(text=mission_text, callback_data=mission_callback))
     
     kb.row(

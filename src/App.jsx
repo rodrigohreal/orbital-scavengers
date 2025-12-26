@@ -40,6 +40,7 @@ const NOZZLE_FIRES = [
 // --- APP PRINCIPAL ---
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [user, setUser] = useState(null); // Telegram User
   const [credits, setCredits] = useState(() => parseInt(localStorage.getItem('os_ultra_credits')) || 500);
   const [droneLevel, setDroneLevel] = useState(() => parseInt(localStorage.getItem('os_ultra_level')) || 1);
   const [inventory, setInventory] = useState(() => JSON.parse(localStorage.getItem('os_ultra_inv')) || []);
@@ -81,6 +82,15 @@ export default function App() {
   const [nozzleMenuOpen, setNozzleMenuOpen] = useState(false);
   const [rankingMenuOpen, setRankingMenuOpen] = useState(false);
 
+  // --- HAPTIC FEEDBACK HELPER ---
+  const triggerHaptic = (style) => {
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
+    } else if (navigator.vibrate) {
+      navigator.vibrate(style === 'heavy' ? 50 : 20);
+    }
+  };
+
   // Mock ranking data (in production, this would come from Telegram API/backend)
   const RANKING_DATA = useMemo(() => [
     { id: 1, username: "Rodrigo", level: 20, rank: 1 },
@@ -94,6 +104,21 @@ export default function App() {
     { id: 9, username: "StellarWing", level: 4, rank: 9 },
     { id: 10, username: "SpaceRookie", level: 2, rank: 10 },
   ], []);
+
+  // --- TELEGRAM INIT ---
+  useEffect(() => {
+    if (window.Telegram?.WebApp) {
+      const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor('#000000'); // Black header to match app
+      
+      const userData = tg.initDataUnsafe?.user;
+      if (userData) {
+        setUser(userData);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('os_ultra_credits', credits);
@@ -119,6 +144,7 @@ export default function App() {
   }, [missionState, timeLeft]);
 
   const startMission = () => {
+    triggerHaptic('heavy');
     // Longer mission time for more cinematic experience (15s base)
     const duration = Math.max(10, 15 - Math.floor(droneLevel/10));
     setTotalDuration(duration);
@@ -127,6 +153,7 @@ export default function App() {
   };
 
   const claim = () => {
+    triggerHaptic('success');
     const roll = Math.random();
     let item = ITEMS_DB[0];
     const levelFactor = droneLevel * 0.1;
@@ -174,6 +201,7 @@ export default function App() {
     const planet = PLANETS[planetId];
     if (!planet || unlockedPlanets.includes(planetId)) return;
     if (credits >= planet.cost) {
+      triggerHaptic('success');
       setCredits(prev => prev - planet.cost);
       setUnlockedPlanets(prev => [...prev, planetId]);
       setSelectedPlanet(planetId);
@@ -184,6 +212,7 @@ export default function App() {
     const ship = SPACESHIPS[spaceshipId];
     if (!ship || unlockedSpaceships.includes(spaceshipId)) return;
     if (credits >= ship.cost) {
+      triggerHaptic('success');
       setCredits(prev => prev - ship.cost);
       setUnlockedSpaceships(prev => [...prev, spaceshipId]);
       setSelectedSpaceship(spaceshipId);
@@ -194,6 +223,7 @@ export default function App() {
     const nozzle = NOZZLE_FIRES[nozzleId];
     if (!nozzle || unlockedNozzleFires.includes(nozzleId)) return;
     if (credits >= nozzle.cost) {
+      triggerHaptic('success');
       setCredits(prev => prev - nozzle.cost);
       setUnlockedNozzleFires(prev => [...prev, nozzleId]);
       setSelectedNozzleFire(nozzleId);
@@ -209,6 +239,7 @@ export default function App() {
   // --- NAVIGATION ---
   const changeSelection = (dir) => {
     if (missionState === 'mining') return;
+    triggerHaptic('light');
     
     if (selectionMode === 'planet') {
         setSelectedPlanet(prev => {
@@ -255,6 +286,7 @@ export default function App() {
   const upgrade = () => {
     const cost = droneLevel * 250;
     if(credits >= cost) {
+      triggerHaptic('success');
       setCredits(c => c - cost);
       setDroneLevel(l => l + 1);
     }
@@ -298,14 +330,33 @@ export default function App() {
         {activeTab === 'home' && (
           <div className="h-full flex flex-col justify-between p-4 pb-28 pointer-events-none">
             
-            {/* Status Bars - Top Right */}
-            <div className="flex gap-3 justify-end pointer-events-auto">
-              <div className="glass-panel px-4 py-2.5 rounded-2xl border-l-4 border-blue-500/80 bg-black/70 backdrop-blur-xl shadow-lg animate-[slideUp_0.5s_ease-out]">
-                <span className="text-gray-400 text-[10px] uppercase block tracking-wider font-bold mb-0.5">CRÉDITOS</span>
-                <span className="text-xl font-bold font-mono text-blue-300 drop-shadow-[0_0_10px_rgba(147,197,253,0.5)]">{credits.toLocaleString()} ₡</span>
-              </div>
-              <div className="glass-panel px-4 py-2.5 rounded-2xl text-xs font-bold text-gray-300 border border-white/10 bg-black/70 backdrop-blur-xl shadow-lg font-orbitron flex items-center animate-[slideUp_0.5s_ease-out]">
-                MK-{droneLevel}
+            {/* Top Bar: User & Status */}
+            <div className="flex justify-between items-start w-full pointer-events-auto">
+              
+              {/* User Profile */}
+              {user ? (
+                <div className="glass-panel px-3 py-2 rounded-2xl flex items-center gap-3 border-l-2 border-cyan-500 bg-black/70 backdrop-blur-xl shadow-lg animate-[slideDown_0.5s_ease-out]">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center font-bold text-black font-orbitron shadow-[0_0_10px_rgba(34,211,238,0.5)]">
+                        {user.first_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <div className="text-[8px] text-cyan-400 uppercase font-bold tracking-widest mb-0.5">CAPITÁN</div>
+                        <div className="text-xs font-bold text-white font-orbitron tracking-wide">{user.first_name}</div>
+                    </div>
+                </div>
+              ) : (
+                <div className="w-10"></div> /* Spacer if no user */
+              )}
+
+              {/* Status Bars - Top Right */}
+              <div className="flex gap-2 items-center">
+                <div className="glass-panel px-4 py-2.5 rounded-2xl border-l-4 border-blue-500/80 bg-black/70 backdrop-blur-xl shadow-lg animate-[slideUp_0.5s_ease-out]">
+                  <span className="text-gray-400 text-[10px] uppercase block tracking-wider font-bold mb-0.5">CRÉDITOS</span>
+                  <span className="text-xl font-bold font-mono text-blue-300 drop-shadow-[0_0_10px_rgba(147,197,253,0.5)]">{credits.toLocaleString()} ₡</span>
+                </div>
+                <div className="glass-panel px-4 py-2.5 rounded-2xl text-xs font-bold text-gray-300 border border-white/10 bg-black/70 backdrop-blur-xl shadow-lg font-orbitron flex items-center animate-[slideUp_0.5s_ease-out]">
+                  MK-{droneLevel}
+                </div>
               </div>
             </div>
 
@@ -947,16 +998,16 @@ export default function App() {
       {/* DOCK INFERIOR */}
       <div className="absolute bottom-6 w-full px-6 z-50 pointer-events-auto">
         <div className="bg-gray-900/80 backdrop-blur-2xl rounded-full p-2 flex justify-between items-center h-20 shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 relative">
-          <button onClick={() => setActiveTab('shop')} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='shop'?'text-blue-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
+          <button onClick={() => { setActiveTab('shop'); triggerHaptic('light'); }} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='shop'?'text-blue-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
             <Icons.Bolt className="w-6 h-6" />
             <span className="text-[9px] font-bold tracking-widest font-orbitron">NAVE</span>
           </button>
           <div className="relative -top-8">
-            <button onClick={() => setActiveTab('home')} className={`w-20 h-20 rounded-full flex items-center justify-center border-[6px] border-black shadow-2xl transition-all duration-300 ${activeTab === 'home' ? 'bg-blue-600 scale-110 shadow-blue-500/50' : 'bg-gray-800 hover:bg-gray-700'}`}>
+            <button onClick={() => { setActiveTab('home'); triggerHaptic('light'); }} className={`w-20 h-20 rounded-full flex items-center justify-center border-[6px] border-black shadow-2xl transition-all duration-300 ${activeTab === 'home' ? 'bg-blue-600 scale-110 shadow-blue-500/50' : 'bg-gray-800 hover:bg-gray-700'}`}>
               <Icons.Home className="w-8 h-8 text-white" />
             </button>
           </div>
-          <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='inventory'?'text-yellow-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
+          <button onClick={() => { setActiveTab('inventory'); triggerHaptic('light'); }} className={`flex-1 flex flex-col items-center gap-1 transition-all duration-300 ${activeTab==='inventory'?'text-yellow-400 -translate-y-1':'text-gray-600 hover:text-gray-400'}`}>
             <div className="relative">
               <Icons.Bag className="w-6 h-6" />
               {inventory.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping border border-black"></span>}
