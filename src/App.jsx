@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Scene3D from './components/Scene3D';
 import SurfaceScene from './components/SurfaceScene';
 import RewardModal from './components/RewardModal';
+import LongMission from './components/LongMission';
 import { Icons } from './components/Icons';
 
 // Data
@@ -81,6 +82,7 @@ export default function App() {
   });
   const [nozzleMenuOpen, setNozzleMenuOpen] = useState(false);
   const [rankingMenuOpen, setRankingMenuOpen] = useState(false);
+  const [longMissionOpen, setLongMissionOpen] = useState(false);
 
   // --- HAPTIC FEEDBACK HELPER ---
   const triggerHaptic = (style) => {
@@ -245,6 +247,16 @@ export default function App() {
     if (unlockedNozzleFires.includes(nozzleId)) {
       setSelectedNozzleFire(nozzleId);
     }
+  };
+
+  // Handle items collected from Long Mission
+  const handleLongMissionItems = (items) => {
+    triggerHaptic('success');
+    const newItems = items.map((item, index) => ({
+      ...item,
+      id: Date.now() + index
+    }));
+    setInventory(prev => [...prev, ...newItems]);
   };
 
   // --- NAVIGATION ---
@@ -480,17 +492,41 @@ export default function App() {
 
                   <div className="flex-1">
                     {missionState === 'idle' && (
-                        <button 
-                            onClick={startMission} 
-                            disabled={!isPlanetUnlocked || !isSpaceshipUnlocked}
-                            className={`w-full py-3 rounded-xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-sm transition-all ${
-                                isPlanetUnlocked && isSpaceshipUnlocked
-                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 text-white border-blue-800 active:border-b-0 active:translate-y-1 hover:shadow-blue-500/50'
-                                : 'bg-gray-800 text-gray-500 border-gray-900 cursor-not-allowed'
-                            }`}
-                        >
-                            {isPlanetUnlocked && isSpaceshipUnlocked ? 'INICIAR MISIÓN' : 'BLOQUEADO'}
-                        </button>
+                        <>
+                          <button 
+                              onClick={startMission} 
+                              disabled={!isPlanetUnlocked || !isSpaceshipUnlocked}
+                              className={`w-full py-3 rounded-xl font-bold tracking-widest shadow-lg border-b-4 font-orbitron text-sm transition-all ${
+                                  isPlanetUnlocked && isSpaceshipUnlocked
+                                  ? 'bg-gradient-to-br from-blue-600 to-blue-700 hover:to-blue-600 text-white border-blue-800 active:border-b-0 active:translate-y-1 hover:shadow-blue-500/50'
+                                  : 'bg-gray-800 text-gray-500 border-gray-900 cursor-not-allowed'
+                              }`}
+                          >
+                              {isPlanetUnlocked && isSpaceshipUnlocked ? 'INICIAR MISIÓN' : 'BLOQUEADO'}
+                          </button>
+
+                          {/* Long Mission (secondary action) */}
+                          <div className="mt-2 pt-2 border-t border-white/10">
+                            <button
+                              onClick={() => { setLongMissionOpen(true); triggerHaptic('medium'); }}
+                              disabled={missionState === 'mining' || !isPlanetUnlocked || !isSpaceshipUnlocked}
+                              className={`w-full py-2 px-3 rounded-xl border pointer-events-auto shadow-lg transition-all flex items-center justify-between gap-2 ${
+                                missionState === 'mining' || !isPlanetUnlocked || !isSpaceshipUnlocked
+                                  ? 'bg-gray-900/50 border-gray-700/50 opacity-50 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-purple-900/50 to-cyan-900/40 border-purple-500/30 hover:border-purple-400/60 hover:shadow-[0_0_18px_rgba(168,85,247,0.18)] active:scale-[0.99]'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg leading-none">🚀</span>
+                                <div className="text-left leading-tight">
+                                  <p className="font-orbitron font-bold text-white text-[11px] tracking-wider">MISIÓN LARGA</p>
+                                  <p className="text-[9px] text-purple-300/70 uppercase tracking-widest">Arcade • Esquiva obstáculos</p>
+                                </div>
+                              </div>
+                              <span className="text-purple-300 text-lg leading-none">→</span>
+                            </button>
+                          </div>
+                        </>
                     )}
 
                     {missionState === 'mining' && (
@@ -1030,6 +1066,17 @@ export default function App() {
 
       {/* MODAL */}
       {reward && <RewardModal item={reward} onClose={() => setReward(null)} />}
+      
+      {/* LONG MISSION GAME MODE */}
+      <LongMission
+        isOpen={longMissionOpen}
+        onClose={() => setLongMissionOpen(false)}
+        spaceshipModel={SPACESHIPS[selectedSpaceship].model}
+        onItemsCollected={handleLongMissionItems}
+        droneLevel={droneLevel}
+        planetMultiplier={currentPlanet?.rarityMultiplier || 1.0}
+        nozzleFire={NOZZLE_FIRES[selectedNozzleFire]}
+      />
     </div>
   );
 }
