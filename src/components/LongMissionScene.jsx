@@ -96,7 +96,7 @@ const LongMissionScene = ({
   // Create star field - reduced count for cleaner look
   const createStarField = () => {
     const geometry = new THREE.BufferGeometry();
-    const count = 400; // Reduced from 3000
+    const count = 250; // Reduced for cleaner long mission background
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     
