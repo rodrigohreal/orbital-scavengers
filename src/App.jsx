@@ -128,6 +128,8 @@ export default function App() {
       
       const userData = tg.initDataUnsafe?.user;
       if (userData) {
+        // Telegram user hydration is intentionally performed here on mount.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setUser(userData);
       }
     }
@@ -150,6 +152,8 @@ export default function App() {
     if (missionState === 'mining' && timeLeft > 0) {
       interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (missionState === 'mining' && timeLeft === 0) {
+      // This effect drives the timer state machine.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMissionState('ready');
       if(navigator.vibrate) navigator.vibrate(200);
     }

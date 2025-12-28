@@ -6,13 +6,14 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 // Importador de GLTF/GLB
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 import { PLANETS } from '../data/planets';
 
 // Smooth easing functions for buttery animations
 const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
-const easeInOutQuad = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const _easeInOutQuad = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 const smoothStep = (t) => t * t * (3 - 2 * t);
 const smootherStep = (t) => t * t * t * (t * (t * 6 - 15) + 10); // Even smoother (quintic)
 
@@ -197,6 +198,7 @@ const Scene3D = ({ missionState, level, totalDuration, timeLeft, planet, spacesh
 
     // Intentar cargar GLB, si falla usar Procedural
     const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
     const modelPath = `${import.meta.env.BASE_URL}${spaceshipModel || 'nave.glb'}`;
     console.log(`Intentando cargar modelo desde: ${modelPath}`);
     

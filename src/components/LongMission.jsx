@@ -129,7 +129,6 @@ const LongMission = ({
   const [rewardItems, setRewardItems] = useState([]);
   const [showingItemIndex, setShowingItemIndex] = useState(-1);
   const [allItemsShown, setAllItemsShown] = useState(false);
-  const [revealSkipped, setRevealSkipped] = useState(false);
 
   // Refs
   const gameEndHandledRef = useRef(false);
@@ -137,6 +136,7 @@ const LongMission = ({
   const revealIntervalRef = useRef(null);
   const revealDoneTimeoutRef = useRef(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   // Reset state when opened
   useEffect(() => {
     if (isOpen) {
@@ -146,11 +146,11 @@ const LongMission = ({
       setRewardItems([]);
       setShowingItemIndex(-1);
       setAllItemsShown(false);
-      setRevealSkipped(false);
       gameEndHandledRef.current = false;
       rewardsStartedRef.current = false;
     }
   }, [isOpen]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Handle score updates from game - stable callback
   const handleScoreUpdate = useCallback((stats) => {
@@ -177,6 +177,7 @@ const LongMission = ({
     setGameState('rewards');
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   // Manage reward reveal timers (prevents multiple intervals + cleans up on close)
   useEffect(() => {
     if (!isOpen) {
@@ -195,7 +196,6 @@ const LongMission = ({
 
     // Reset reveal state each time we enter rewards
     setAllItemsShown(false);
-    setRevealSkipped(false);
     setShowingItemIndex(rewardItems.length > 0 ? 0 : -1);
 
     if (revealIntervalRef.current) {
@@ -243,9 +243,9 @@ const LongMission = ({
       }
     };
   }, [isOpen, gameState, rewardItems.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const skipReveal = () => {
-    setRevealSkipped(true);
     setShowingItemIndex(rewardItems.length - 1);
     setAllItemsShown(true);
     if (revealIntervalRef.current) {
@@ -262,7 +262,12 @@ const LongMission = ({
   const finishMission = () => {
     if (onItemsCollected && rewardItems.length > 0) {
       // Remove animation delay property before sending
-      const cleanItems = rewardItems.map(({ animationDelay, weight, ...item }) => item);
+      const cleanItems = rewardItems.map((item) => {
+        const clean = { ...item };
+        delete clean.animationDelay;
+        delete clean.weight;
+        return clean;
+      });
       onItemsCollected(cleanItems);
     }
     onClose();
@@ -429,64 +434,68 @@ const LongMission = ({
             </div>
           )}
 
-          {/* Items Display - Horizontal Scroll */}
-          <div className="flex-1 flex items-center overflow-x-auto px-4 py-8 snap-x snap-mandatory scrollbar-hide">
-            <div className="flex gap-4 mx-auto">
-              {rewardItems.map((item, index) => (
-                <div
-                  key={item.id}
-                  className={`
-                    flex-shrink-0 w-32 snap-center
-                    transition-all duration-500 ease-out
-                    ${index <= showingItemIndex 
-                      ? 'opacity-100 translate-y-0 scale-100' 
-                      : 'opacity-0 translate-y-8 scale-90'
-                    }
-                  `}
-                  style={{
-                    transitionDelay: `${index * 50}ms`,
-                  }}
-                >
-                  <div 
+          {/* Items Display - Responsive Grid (mobile-friendly) */}
+          <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-hide">
+            {rewardItems.length > 0 ? (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4 max-w-5xl mx-auto content-start">
+                {rewardItems.map((item, index) => (
+                  <div
+                    key={item.id}
                     className={`
-                      bg-gradient-to-br ${RARITY_GRADIENTS[item.rarity]}
-                      border-2 ${RARITY_BORDERS[item.rarity]}
-                      rounded-2xl p-4 text-center
-                      shadow-lg ${RARITY_GLOW[item.rarity]}
-                      transform hover:scale-105 transition-transform
+                      w-full
+                      transition-all duration-500 ease-out
+                      ${index <= showingItemIndex
+                        ? 'opacity-100 translate-y-0 scale-100'
+                        : 'opacity-0 translate-y-3 scale-95'
+                      }
                     `}
+                    style={{
+                      transitionDelay: `${index * 50}ms`,
+                    }}
                   >
-                    {/* Item Icon */}
-                    <div className="text-4xl mb-2 animate-bounce" style={{ animationDelay: `${index * 0.1}s` }}>
-                      {item.icon}
-                    </div>
-                    
-                    {/* Item Name */}
-                    <h3 className={`font-bold text-xs leading-tight mb-1 ${item.style}`}>
-                      {item.name}
-                    </h3>
-                    
-                    {/* Rarity Tag */}
-                    <span className="text-[8px] uppercase tracking-wider text-gray-500 bg-black/40 px-2 py-0.5 rounded-full">
-                      {item.rarity}
-                    </span>
-                    
-                    {/* Value */}
-                    <div className="mt-2 text-sm font-mono font-bold text-yellow-400">
-                      +{item.val.toLocaleString()}₡
+                    <div
+                      className={`
+                        bg-gradient-to-br ${RARITY_GRADIENTS[item.rarity]}
+                        border-2 ${RARITY_BORDERS[item.rarity]}
+                        rounded-2xl p-3 sm:p-4 text-center
+                        shadow-lg ${RARITY_GLOW[item.rarity]}
+                        transform hover:scale-105 transition-transform
+                      `}
+                    >
+                      {/* Item Icon */}
+                      <div
+                        className="text-3xl sm:text-4xl mb-2 animate-bounce"
+                        style={{ animationDelay: `${index * 0.1}s` }}
+                      >
+                        {item.icon}
+                      </div>
+
+                      {/* Item Name */}
+                      <h3 className={`font-bold text-[10px] sm:text-xs leading-tight mb-1 ${item.style}`}>
+                        {item.name}
+                      </h3>
+
+                      {/* Rarity Tag */}
+                      <span className="text-[8px] uppercase tracking-wider text-gray-500 bg-black/40 px-2 py-0.5 rounded-full">
+                        {item.rarity}
+                      </span>
+
+                      {/* Value */}
+                      <div className="mt-2 text-xs sm:text-sm font-mono font-bold text-yellow-400">
+                        +{item.val.toLocaleString()}₡
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-              
-              {/* Empty state if no items */}
-              {rewardItems.length === 0 && showingItemIndex >= 0 && (
-                <div className="text-center text-gray-500 py-12">
+                ))}
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-center text-gray-500 px-6">
+                <div className="py-12">
                   <p className="text-4xl mb-4">😢</p>
                   <p>No sobreviviste lo suficiente para recolectar objetos</p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Total Value */}

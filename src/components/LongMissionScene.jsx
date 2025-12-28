@@ -7,6 +7,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 // Game constants
 const LANE_WIDTH = 4;
@@ -745,6 +746,7 @@ const LongMissionScene = ({
     shipRef.current = shipContainer;
 
     const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
     const baseUrl = import.meta.env.BASE_URL || '/';
     const modelPath = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}${(spaceshipModel || 'nave.glb').replace(/^\//, '')}`;
     

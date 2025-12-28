@@ -9,6 +9,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 // Smooth easing functions
 const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -28,7 +29,7 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet, spaceship
   const particles = useRef([]);
   const laserRef = useRef(null);
   const skyRef = useRef(null);
-  const shockwaveRef = useRef(null);
+  const _shockwaveRef = useRef(null);
   const trailRef = useRef(null);
   const noseGlowRef = useRef(null);
   
@@ -290,6 +291,7 @@ const SurfaceScene = ({ missionState, timeLeft, totalDuration, planet, spaceship
     };
 
     const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
     const modelPath = `${import.meta.env.BASE_URL}${spaceshipModel || 'nave.glb'}`;
     loader.load(modelPath, (gltf) => {
         const loadedShip = gltf.scene;
