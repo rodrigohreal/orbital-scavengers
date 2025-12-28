@@ -33,6 +33,11 @@ const OBSTACLE_TYPES = [
   { type: 'asteroid_ice', color: 0xaaccff, size: 1.6, points: 20 }, // New rare type
 ];
 
+// Frame-rate independent damping (for smooth lane movement at any FPS)
+const damp = (current, target, smoothing, dt) => {
+  return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-smoothing * dt));
+};
+
 const LongMissionScene = ({ 
   isActive, 
   onGameEnd, 
@@ -79,6 +84,9 @@ const LongMissionScene = ({
   // Refs for callbacks to avoid stale closures
   const onGameEndRef = useRef(onGameEnd);
   const onScoreUpdateRef = useRef(onScoreUpdate);
+  
+  // Touch/click deduplication ref (prevent synthetic click from firing after touchend on mobile)
+  const lastTouchTimeRef = useRef(0);
   
   // Keep refs updated
   useEffect(() => {
@@ -526,11 +534,18 @@ const LongMissionScene = ({
           moveToLane(-1); // Swipe left
         }
       }
+      
+      // Record touch time to prevent synthetic click from firing
+      lastTouchTimeRef.current = Date.now();
     };
     
     // Also allow tap on left/right side of screen
     const handleClick = (e) => {
       if (!gameStateRef.current.isPlaying) return;
+      
+      // Ignore synthetic click events from mobile touch (within 450ms of last touch)
+      if (Date.now() - lastTouchTimeRef.current < 450) return;
+      
       const screenWidth = window.innerWidth;
       const clickX = e.clientX;
       
@@ -869,8 +884,14 @@ const LongMissionScene = ({
           });
         }
 
-        // Ship lane movement (smooth lerp) - smoother transitions
-        state.currentLane = THREE.MathUtils.lerp(state.currentLane, state.targetLane, 0.12);
+        // Ship lane movement (frame-rate independent damping for smooth, consistent transitions)
+        const laneSmooth = 22; // Higher = snappier lane change (14..30 range)
+        state.currentLane = damp(state.currentLane, state.targetLane, laneSmooth, dt);
+        
+        // Snap to target when very close to avoid endless tiny drift
+        if (Math.abs(state.currentLane - state.targetLane) < 0.001) {
+          state.currentLane = state.targetLane;
+        }
         
         if (shipRef.current) {
           const shipX = state.currentLane * LANE_WIDTH;
@@ -878,12 +899,13 @@ const LongMissionScene = ({
           shipRef.current.position.y = 0 + Math.sin(time * 2) * 0.2;
           shipRef.current.position.z = 0;
           
-          // Tilt based on movement
+          // Tilt based on movement (also frame-rate independent)
           const tiltTarget = (state.targetLane - state.currentLane) * 0.5;
-          shipRef.current.rotation.z = THREE.MathUtils.lerp(
+          shipRef.current.rotation.z = damp(
             shipRef.current.rotation.z,
             tiltTarget,
-            0.1
+            18,
+            dt
           );
           
           // Slight pitch oscillation
